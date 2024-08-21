@@ -5,6 +5,7 @@ from aiogram.types import Message
 
 from tg_bot.functions import cleanup
 from tg_bot.routers.main.keyboard import generate_reply_keyboard_for_main_menu
+from tg_bot.routers.main.main_backend import init_jobs
 from tg_bot.security import user_access
 
 from tg_bot.static.emojis import Emoji
@@ -22,5 +23,6 @@ async def main_menu_handler(message: Message, state: FSMContext):
     else:
         await message.answer(f'Главное меню', reply_markup=generate_reply_keyboard_for_main_menu())
 
+    await init_jobs()
     await state.clear()
 

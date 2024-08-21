@@ -1,12 +1,24 @@
 import os
 import xlwt
+from io import BytesIO
+from datetime import datetime, timedelta
+import locale
 
 from database.models.Employee import Employee
+from database.models.ReportData import ReportData
+from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 
 
 class BrosokReporter:
     def __init__(self):
         self.workbook = xlwt.Workbook()
+        self.bytes_output = BytesIO()
+        self.reporting_week = [3, 4, 5, 6, 0, 1, 2]
+        self.months_translate = {
+            'January': 'января', 'February': 'февраля', 'March': 'марта', 'April': 'апреля',
+            'May': 'мая', 'June': 'июня', 'July': 'июля', 'August': 'августа',
+            'September': 'сентября', 'October': 'октября', 'November': 'ноября', 'December': 'декабря'
+        }
 
         self.center_alignment_style = xlwt.easyxf("align: horiz center, vert center; font: height 220;")
         self.header_row_style = xlwt.easyxf('pattern: pattern solid, fore_colour light_green;'
@@ -18,7 +30,17 @@ class BrosokReporter:
             {'header': 'Должность', 'data_func': lambda data: data.position},
             {'header': 'ФИО сотрудников', 'data_func': lambda data: data.full_name},
             {'header': 'Ставка по бюджету проекта', 'data_func': lambda data: data.working_rate},
-            {'header': 'Статус', 'data_func': lambda data: 'Работа с 30 мая'}
+            {'header': 'Статус', 'data_func': lambda data: self.__get_status(data.absence_reason)}
+        ]
+
+        self.scientific_research_work_columns = [
+            {'header': 'Наименование работ в соответствии с тз', 'data_func': lambda data: data.work_name},
+            {'header': 'Фактически выполненные работы за отчетный период', 'data_func':
+                lambda data: data.actual_performance},
+            {'header': 'Полученный результат (вид отчетности)', 'data_func': lambda data: data.obtained_result},
+            {'header': 'ФИО сотрудника', 'data_func': lambda data: Employee.get_by_id(data.employee_id).full_name},
+            {'header': 'План работ на следующую неделю', 'data_func': lambda data: data.work_plan},
+            {'header': 'Примечание', 'data_func': lambda data: data.note},
         ]
 
     @staticmethod
@@ -39,7 +61,34 @@ class BrosokReporter:
             worksheet.write(row_index, column_index, value, self.center_alignment_style)
             self.__set_column_width(worksheet, column_index, value)
 
-    async def generate_xls_staff_state_report(self):
+    async def generate_report(self):
+        self.__generate_xls_staff_state_report()
+        self.__generate_xls_scientific_research_work_report()
+        self.workbook.save(self.bytes_output)
+
+        return self.bytes_output.getvalue()
+
+    def __get_status(self, absence_reason: int):
+        absence_reason_desc = AbsenceReasons.get_desc_from_num(absence_reason)
+
+        weekday = datetime.today().weekday()
+        index = self.reporting_week.index(weekday)
+
+        start_week = datetime.today() - timedelta(days=index)
+        end_week = datetime.today() + timedelta(days=len(self.reporting_week) - 1 - index)
+
+        start_month_en = start_week.strftime("%B")
+        end_month_en = end_week.strftime("%B")
+
+        start_month_ru = self.months_translate[start_month_en]
+        end_month_ru = self.months_translate[end_month_en]
+
+        status = (f'{absence_reason_desc} с "{start_week.strftime("%d")}" {start_month_ru} '
+                  f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
+
+        return status
+
+    def __generate_xls_staff_state_report(self):
         try:
             worksheet = self.workbook.add_sheet('Состояние кадрового обеспечения')
 
@@ -50,8 +99,19 @@ class BrosokReporter:
             for row_index, employee in enumerate(list_of_employees):
                 self.__write_xls_data_row(worksheet, self.staff_state_columns, row_index + 1, employee)
 
-            return self.workbook
-
         except Exception:
             return None
 
+    def __generate_xls_scientific_research_work_report(self):
+        try:
+            worksheet = self.workbook.add_sheet('Выполненные работы')
+
+            list_of_report_data = ReportData.get_all()
+
+            self.__write_xls_header_row(worksheet, self.scientific_research_work_columns)
+
+            for row_index, report_data in enumerate(list_of_report_data):
+                self.__write_xls_data_row(worksheet, self.scientific_research_work_columns, row_index + 1, report_data)
+
+        except Exception:
+            return None
