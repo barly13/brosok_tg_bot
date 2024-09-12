@@ -2,7 +2,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer
 import threading
 
-from database.session_controller import session_controller, SessionController
+from database.session_controller import session_controller
 
 Base = declarative_base()
 
@@ -72,6 +72,3 @@ class BaseModel(Base):
                 session.commit()
         except Exception:
             session.rollback()
-
-    def repr(self):
-        return "<{0.class.name}(id={0.id!r})>".format(self)

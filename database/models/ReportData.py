@@ -17,4 +17,4 @@ class ReportData(BaseModel):
     @classmethod
     def is_report_data_has_not_employee(cls, employee_id: int) -> bool:
         session = session_controller.get_session()
-        return session.query(cls).filter_by(employee_id=employee_id).scalar() is None
+        return session.query(cls).filter_by(employee_id=employee_id).count() == 0

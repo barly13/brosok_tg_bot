@@ -20,10 +20,10 @@ class BrosokReporter:
             'September': 'сентября', 'October': 'октября', 'November': 'ноября', 'December': 'декабря'
         }
 
-        self.center_alignment_style = xlwt.easyxf("align: horiz center, vert center; font: height 220;")
+        self.center_alignment_style = xlwt.easyxf("align: horiz center, vert center, wrap on; font: height 220;")
         self.header_row_style = xlwt.easyxf('pattern: pattern solid, fore_colour light_green;'
                                             'font: bold on, height 220;'
-                                            'align: horiz center, vert center;')
+                                            'align: horiz center, vert center, wrap on;')
 
         self.staff_state_columns = [
             {'header': '№ п/п', 'data_func': lambda data: data.id},
@@ -34,7 +34,7 @@ class BrosokReporter:
         ]
 
         self.scientific_research_work_columns = [
-            {'header': 'Наименование работ в соответствии с тз', 'data_func': lambda data: data.work_name},
+            {'header': 'Наименование работ в соответствии с ТЗ', 'data_func': lambda data: data.work_name},
             {'header': 'Фактически выполненные работы за отчетный период', 'data_func':
                 lambda data: data.actual_performance},
             {'header': 'Полученный результат (вид отчетности)', 'data_func': lambda data: data.obtained_result},
@@ -45,7 +45,10 @@ class BrosokReporter:
 
     @staticmethod
     def __set_column_width(worksheet, column_index, value):
-        column_width = len(str(value)) * 300
+        min_width, max_width = 3000, 10000
+        column_width = len(str(value)) * 256
+        column_width = max(min_width, min(column_width, max_width))
+
         if worksheet.col(column_index).width < column_width:
             worksheet.col(column_index).width = column_width
 
@@ -99,8 +102,8 @@ class BrosokReporter:
             for row_index, employee in enumerate(list_of_employees):
                 self.__write_xls_data_row(worksheet, self.staff_state_columns, row_index + 1, employee)
 
-        except Exception:
-            return None
+        except Exception as exp:
+            print(f'Ошибка в заполнении отчета по состоянию кадрового обеспечения: {exp}')
 
     def __generate_xls_scientific_research_work_report(self):
         try:
@@ -113,5 +116,5 @@ class BrosokReporter:
             for row_index, report_data in enumerate(list_of_report_data):
                 self.__write_xls_data_row(worksheet, self.scientific_research_work_columns, row_index + 1, report_data)
 
-        except Exception:
-            return None
+        except Exception as exp:
+            print(f'Ошибка в заполнении отчета по выполненным работам: {exp}')

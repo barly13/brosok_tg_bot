@@ -1,14 +1,14 @@
+import os
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import Message, ReplyKeyboardMarkup, URLInputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, FSInputFile
 
 from tg_bot.functions import cleanup
 from tg_bot.routers.reports.backend import get_report_backend
 from tg_bot.routers.reports.keyboard import get_report_kb
 from tg_bot.security import user_access
 from tg_bot.settings import bot
-from tg_bot.static.emojis import Emoji
 
 get_report_router = Router()
 
@@ -24,7 +24,13 @@ async def get_report_menu_handler(message: Message, state: FSMContext):
 @user_access
 async def get_excel_report(message: Message, state: FSMContext):
     excel_report = await get_report_backend.get_excel_report()
+    await bot.send_document(message.from_user.id, excel_report, caption='Отчет')
 
-    mes = 'Отчет'
 
-    await bot.send_document(message.from_user.id, excel_report, caption=mes)
+@get_report_router.message(cleanup(F.text).lower() == 'инструкция по использованию')
+@user_access
+async def get_instruction(message: Message, state: FSMContext):
+    instruction_docx = FSInputFile(path=os.path.join(os.getcwd(), 'Инструкция ТГ-бота.docx'),
+                                   filename='Инструкция ТГ-бота.docx')
+
+    await bot.send_document(message.from_user.id, instruction_docx, caption='Инструкция')

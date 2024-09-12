@@ -68,6 +68,7 @@ async def filling_out_employee_report(callback: CallbackQuery, state: FSMContext
 @user_access
 async def returning_employee_menu_handler(message: Message, state: FSMContext):
     data = await state.get_data()
+    print(data)
     employee_id = data['employee_id']
     response = await filling_out_report_backend.get_employee_by_id(employee_id)
     markup = ReplyKeyboardMarkup(keyboard=fill_out_employee_report_kb, resize_keyboard=True)
@@ -126,7 +127,7 @@ async def filling_out_employee_report(callback: CallbackQuery, state: FSMContext
         if response.error:
             await bot.send_message(chat_id=callback.message.chat.id, text=f'{str(Emoji.Error)} {response.message}')
         else:
-            if absence_reason_num == AbsenceReasons.NoReason:
+            if absence_reason_num == AbsenceReasons.NoReason.num:
                 await returning_employee_menu_handler(callback.message, state)
             else:
                 markup = ReplyKeyboardMarkup(keyboard=fill_out_report_kb, resize_keyboard=True)
