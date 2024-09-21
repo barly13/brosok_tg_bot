@@ -34,13 +34,10 @@ class BrosokReporter:
         ]
 
         self.scientific_research_work_columns = [
-            {'header': 'Наименование работ в соответствии с ТЗ', 'data_func': lambda data: data.work_name},
+            {'header': 'ФИО сотрудника', 'data_func': lambda data: Employee.get_by_id(data.employee_id).full_name},
             {'header': 'Фактически выполненные работы за отчетный период', 'data_func':
                 lambda data: data.actual_performance},
             {'header': 'Полученный результат (вид отчетности)', 'data_func': lambda data: data.obtained_result},
-            {'header': 'ФИО сотрудника', 'data_func': lambda data: Employee.get_by_id(data.employee_id).full_name},
-            {'header': 'План работ на следующую неделю', 'data_func': lambda data: data.work_plan},
-            {'header': 'Примечание', 'data_func': lambda data: data.note},
         ]
 
     @staticmethod
@@ -71,23 +68,25 @@ class BrosokReporter:
 
         return self.bytes_output.getvalue()
 
-    def __get_status(self, absence_reason: int):
-        absence_reason_desc = AbsenceReasons.get_desc_from_num(absence_reason)
+    def __get_status(self, absence_reason_desc: str):
+        if absence_reason_desc in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
 
-        weekday = datetime.today().weekday()
-        index = self.reporting_week.index(weekday)
+            weekday = datetime.today().weekday()
+            index = self.reporting_week.index(weekday)
 
-        start_week = datetime.today() - timedelta(days=index)
-        end_week = datetime.today() + timedelta(days=len(self.reporting_week) - 1 - index)
+            start_week = datetime.today() - timedelta(days=index)
+            end_week = datetime.today() + timedelta(days=len(self.reporting_week) - 1 - index)
 
-        start_month_en = start_week.strftime("%B")
-        end_month_en = end_week.strftime("%B")
+            start_month_en = start_week.strftime("%B")
+            end_month_en = end_week.strftime("%B")
 
-        start_month_ru = self.months_translate[start_month_en]
-        end_month_ru = self.months_translate[end_month_en]
+            start_month_ru = self.months_translate[start_month_en]
+            end_month_ru = self.months_translate[end_month_en]
 
-        status = (f'{absence_reason_desc} с "{start_week.strftime("%d")}" {start_month_ru} '
-                  f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
+            status = (f'{absence_reason_desc} с "{start_week.strftime("%d")}" {start_month_ru} '
+                      f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
+        else:
+            status = ''
 
         return status
 

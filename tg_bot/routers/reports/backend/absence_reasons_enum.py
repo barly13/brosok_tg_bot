@@ -4,7 +4,7 @@ from enum import Enum
 class AbsenceReasons(Enum):
     NoReason = (0, 'Работа')
     Vacation = (1, 'Отпуск')
-    SickLeave = (2, 'Больничный')
+    Sickness = (2, 'Больничный')
     BusinessTrip = (3, 'Командировка')
 
     def __init__(self, num: int, desc: str):

@@ -22,9 +22,16 @@ class Emoji(Enum):
     Cancel = '❎'
     Picture = '🖼'
     RobotEmoji = '🤖'
+    SicknessEmoji = '😷'
+    VacationEmoji = '🌴'
+    BusinessTripEmoji = '💼'
     EmployeeEmoji = '🧑‍💻'
     PenEmoji = '🖊️'
     WrenchEmoji = '🔧'
+    CalendarEmoji = '📅'
+    RightArrowEmoji = '➡️'
+    DownArrowEmoji = '⬇️'
+    CheckMarkEmoji = '📌'
 
     def __str__(self):
         return self.value
