@@ -9,10 +9,9 @@ from tg_bot.functions import cleanup
 from tg_bot.routers.main.main_handler import main_menu_handler
 from tg_bot.routers.reports.backend import filling_out_report_backend
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
-from tg_bot.routers.reports.backend.filling_out_report_backend import update_employee_absence_reason_by_id
 from tg_bot.routers.reports.keyboard import generate_inline_kb_for_employees_list, \
     generate_calendar_inline_kb, generate_obtained_result_inline_kb, generate_absence_reason_inline_kb, \
-    generate_cancel_inline_kb, generate_note_inline_kb, generate_final_inline_kb, generate_period_or_dates_inline_kb, \
+    generate_cancel_inline_kb, generate_final_inline_kb, generate_period_or_dates_inline_kb, \
     generate_fill_manual_inline_kb
 from tg_bot.security import user_access
 from tg_bot.static.emojis import Emoji
@@ -155,15 +154,14 @@ async def select_days_dates(callback: CallbackQuery, state: FSMContext):
 
     if 'start_day_dates' in data:
         next_day = datetime(int(year), int(month), int(day))
-        await state.update_data(day=next_day)
-
-        calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
-
-        await callback.message.edit_reply_markup(reply_markup=calendar_markup)
+        await state.update_data({str(day): next_day})
 
     else:
         start_date = datetime(int(year), int(month), int(day))
         await state.update_data(start_day_dates=start_date)
+
+        calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
+        await callback.message.edit_reply_markup(reply_markup=calendar_markup)
 
 
 @filling_out_report_router.callback_query(F.data.split(':')[0] == 'prev_month_period')
@@ -258,7 +256,8 @@ async def absence_reason_handler(callback: CallbackQuery, state: FSMContext):
             absence_reason_desc = AbsenceReasons.NoReason.desc
 
         if absence_reason_desc in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
-            response = await update_employee_absence_reason_by_id(data['employee_id'], absence_reason_desc)
+            response = await filling_out_report_backend.update_employee_absence_reason_by_id(data['employee_id'],
+                                                                                             absence_reason_desc)
 
             if response.error:
                 await callback.message.answer(text=f'{str(Emoji.Error)} {response.message}')
@@ -293,15 +292,17 @@ async def absence_reason_manual_handler(message: Message, state: FSMContext):
 
         for key in data.keys():
             if key.isdigit():
-                day = data[key].strftime("%d")
-                month_english = data[key].strftime("%B")
+                date = data[key]
+
+                day = date.strftime("%d")
+                month_english = date.strftime("%B")
                 month_russian = months[month_english]
 
-                year = day.year
+                year = date.year
 
                 selected_days += f'{day} {month_russian} {year} г.\n'
 
-        cancel_inline_kb = await generate_cancel_inline_kb()
+        cancel_inline_kb = generate_cancel_inline_kb()
 
         await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
         await message.answer(text=f'{str(Emoji.CalendarEmoji)} Вы выбрали следующие даты:\n'
@@ -331,7 +332,7 @@ async def absence_reason_manual_handler(message: Message, state: FSMContext):
         else:
             selected_period = f'{start_day} {start_month_russian} {start_year} г.'
 
-        cancel_inline_kb = await generate_cancel_inline_kb()
+        cancel_inline_kb = generate_cancel_inline_kb()
 
         await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
         await message.answer(text=f'{str(Emoji.CalendarEmoji)} Вы выбрали следующий период:\n'
@@ -348,8 +349,8 @@ async def enter_absence_reason_manual_handler(message: Message, state: FSMContex
         await main_menu_handler(message, state)
 
     elif 'employee_id' in data:
-        response = await update_employee_absence_reason_by_id(data['employee_id'], message.text)
-
+        response = await filling_out_report_backend.update_employee_absence_reason_by_id(data['employee_id'],
+                                                                                         message.text)
         if response.error:
             await message.answer(text=f'{str(Emoji.Error)} {response.message}')
             await main_menu_handler(message, state)
@@ -426,7 +427,24 @@ async def get_final_result(message: Message, state: FSMContext):
 
 @filling_out_report_router.callback_query(F.data == 'save_data')
 async def save_data_handler(callback: CallbackQuery, state: FSMContext):
-    await main_menu_handler(callback.message, state)
+    data = await state.get_data()
+    if 'employee_id' in data:
+        if {'actual_performance', 'obtained_result'}.issubset(set(data.keys())):
+            response = await filling_out_report_backend.add_report_data(data['actual_performance'],
+                                                                        data['obtained_result'],
+                                                                        data['employee_id'])
+            if response.error:
+                await callback.message.answer(text=f'{str(Emoji.Error)} {response.message}')
+                await filling_out_report_menu_handler(callback.message, state)
+            else:
+                await callback.message.answer(text=f'{str(Emoji.Success)} {response.message}')
+                await main_menu_handler(callback.message, state)
+        else:
+            await callback.message.answer(text=f'{str(Emoji.Warning)} Информация не сохранилась, заполните еще раз!')
+            await filling_out_report_menu_handler(callback.message, state)
+    else:
+        await callback.message.answer(text=f'{str(Emoji.Warning)} Вы не выбрали сотрудника!')
+        await filling_out_report_menu_handler(callback.message, state)
 
 
 @filling_out_report_router.callback_query(F.data == 'change_name')
