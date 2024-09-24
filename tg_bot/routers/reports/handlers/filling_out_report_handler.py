@@ -12,7 +12,8 @@ from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from tg_bot.routers.reports.backend.filling_out_report_backend import update_employee_absence_reason_by_id
 from tg_bot.routers.reports.keyboard import generate_inline_kb_for_employees_list, \
     generate_calendar_inline_kb, generate_obtained_result_inline_kb, generate_absence_reason_inline_kb, \
-    generate_cancel_inline_kb, generate_note_inline_kb, generate_final_inline_kb, generate_period_or_dates_inline_kb
+    generate_cancel_inline_kb, generate_note_inline_kb, generate_final_inline_kb, generate_period_or_dates_inline_kb, \
+    generate_fill_manual_inline_kb
 from tg_bot.security import user_access
 from tg_bot.static.emojis import Emoji
 
@@ -20,6 +21,13 @@ filling_out_report_router = Router()
 
 report_data_dict = {'actual_performance': '"Выполненные работы"',
                     'obtained_result': '"Полученный результат"', 'employee_id': '"ФИО"'}
+
+months = {
+    'January': 'января', 'February': 'февраля', 'March': 'марта',
+    'April': 'апреля', 'May': 'мая', 'June': 'июня',
+    'July': 'июля', 'August': 'августа', 'September': 'сентября',
+    'October': 'октября', 'November': 'ноября', 'December': 'декабря'
+}
 
 
 class FillingOutReportStates(StatesGroup):
@@ -72,6 +80,8 @@ async def filling_out_employee_report(callback: CallbackQuery, state: FSMContext
 
 @filling_out_report_router.callback_query(F.data == 'choose_period')
 async def choose_period_handler(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(choose_period='')
+
     data = await state.get_data()
 
     if 'employee_id' in data:
@@ -96,6 +106,8 @@ async def choose_period_handler(callback: CallbackQuery, state: FSMContext):
 
 @filling_out_report_router.callback_query(F.data == 'choose_dates')
 async def choose_dates_handler(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(choose_dates='')
+
     data = await state.get_data()
 
     if 'employee_id' in data:
@@ -103,7 +115,6 @@ async def choose_dates_handler(callback: CallbackQuery, state: FSMContext):
         if response.error:
             await callback.message.answer(text=f'{str(Emoji.Error)} {response.message}')
         else:
-
             today = datetime.today()
             calendar_markup = generate_calendar_inline_kb(today.year, today.month, is_period=False)
 
@@ -118,25 +129,44 @@ async def choose_dates_handler(callback: CallbackQuery, state: FSMContext):
         await filling_out_report_menu_handler(callback.message, state)
 
 
-@filling_out_report_router.callback_query(F.data.split(':')[0] == 'day')
-async def select_date(callback: CallbackQuery, state: FSMContext):
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'day_period')
+async def select_days_period(callback: CallbackQuery, state: FSMContext):
     year, month, day = map(int, callback.data.split(':')[1:])
 
     data = await state.get_data()
 
-    if 'start_date' in data:
+    if 'start_day_period' in data:
         end_date = datetime(int(year), int(month), int(day))
-        await state.update_data(end_date=end_date)
+        await state.update_data(end_day_period=end_date)
 
         absence_reason_inline_kb = generate_absence_reason_inline_kb()
         await callback.message.answer(text=f'{str(Emoji.CheckMarkEmoji)} Выберите причину отсутствия: ',
                                       reply_markup=absence_reason_inline_kb)
     else:
         start_date = datetime(int(year), int(month), int(day))
-        await state.update_data(start_date=start_date)
+        await state.update_data(start_day_period=start_date)
 
 
-@filling_out_report_router.callback_query(F.data.split(':')[0] == 'prev_month')
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'day_dates')
+async def select_days_dates(callback: CallbackQuery, state: FSMContext):
+    year, month, day = map(int, callback.data.split(':')[1:])
+
+    data = await state.get_data()
+
+    if 'start_day_dates' in data:
+        next_day = datetime(int(year), int(month), int(day))
+        await state.update_data(day=next_day)
+
+        calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
+
+        await callback.message.edit_reply_markup(reply_markup=calendar_markup)
+
+    else:
+        start_date = datetime(int(year), int(month), int(day))
+        await state.update_data(start_day_dates=start_date)
+
+
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'prev_month_period')
 async def prev_month_handler(callback: CallbackQuery, state: FSMContext):
     year, month = map(int, callback.data.split(':')[1:])
     if month == 1:
@@ -149,7 +179,20 @@ async def prev_month_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup(reply_markup=new_calendar_markup)
 
 
-@filling_out_report_router.callback_query(F.data.split(':')[0] == 'next_month')
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'prev_month_dates')
+async def prev_month_handler(callback: CallbackQuery, state: FSMContext):
+    year, month = map(int, callback.data.split(':')[1:])
+    if month == 1:
+        month = 12
+        year -= 1
+    else:
+        month -= 1
+
+    new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False)
+    await callback.message.edit_reply_markup(reply_markup=new_calendar_markup)
+
+
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'next_month_period')
 async def next_month_handler(callback: CallbackQuery, state: FSMContext):
     year, month = map(int, callback.data.split(':')[1:])
     if month == 12:
@@ -160,6 +203,27 @@ async def next_month_handler(callback: CallbackQuery, state: FSMContext):
 
     new_calendar_markup = generate_calendar_inline_kb(year, month)
     await callback.message.edit_reply_markup(reply_markup=new_calendar_markup)
+
+
+@filling_out_report_router.callback_query(F.data.split(':')[0] == 'next_month_dates')
+async def next_month_handler(callback: CallbackQuery, state: FSMContext):
+    year, month = map(int, callback.data.split(':')[1:])
+    if month == 12:
+        month = 1
+        year += 1
+    else:
+        month += 1
+
+    new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False)
+    await callback.message.edit_reply_markup(reply_markup=new_calendar_markup)
+
+
+@filling_out_report_router.callback_query(F.data == 'continue_filling_in')
+async def continue_filling_in_handler(callback: CallbackQuery, state: FSMContext):
+    fill_manual_inline_kb = generate_fill_manual_inline_kb()
+
+    await callback.message.answer(text=f'Выберите "Заполнить вручную" или "Отмена":',
+                                  reply_markup=fill_manual_inline_kb)
 
 
 @filling_out_report_router.callback_query(F.data == 'cancel_all')
@@ -175,28 +239,6 @@ async def skip_absence_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FillingOutReportStates.enter_actual_performance)
 
 
-# @filling_out_report_router.callback_query(F.data.split('__')[0] == 'absence_reason')
-# async def filling_out_employee_report(callback: CallbackQuery, state: FSMContext):
-#     absence_reason_num = int(callback.data.split('__')[1])
-#     data = await state.get_data()
-#     if 'employee_id' in data:
-#         response = await update_employee_absence_reason_by_id(data['employee_id'], absence_reason_num)
-#         if response.error:
-#             await bot.send_message(chat_id=callback.message.chat.id, text=f'{str(Emoji.Error)} {response.message}')
-#         else:
-#             if absence_reason_num == AbsenceReasons.NoReason.num:
-#                 await returning_employee_menu_handler(callback.message, state)
-#             else:
-#                 markup = ReplyKeyboardMarkup(keyboard=fill_out_report_kb, resize_keyboard=True)
-#                 await bot.send_message(chat_id=callback.message.chat.id, text=f'{str(Emoji.Success)} {response.message}',
-#                                        reply_markup=markup)
-#                 await state.clear()
-#     else:
-#         markup = ReplyKeyboardMarkup(keyboard=fill_out_report_kb, resize_keyboard=True)
-#         await bot.send_message(chat_id=callback.message.chat.id, text='Составление отчета', reply_markup=markup)
-#         await state.clear()
-
-
 @filling_out_report_router.callback_query(F.data.split(':')[0] == 'absence_reason')
 async def absence_reason_handler(callback: CallbackQuery, state: FSMContext):
     _, absence_reason = callback.data.split(':')
@@ -210,31 +252,116 @@ async def absence_reason_handler(callback: CallbackQuery, state: FSMContext):
         elif absence_reason == 'sickness':
             absence_reason_desc = AbsenceReasons.Sickness.desc
         elif absence_reason == 'fill_manual':
-            await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
+            absence_reason_desc = 'вручную'
+            await absence_reason_manual_handler(callback.message, state)
         else:
             absence_reason_desc = AbsenceReasons.NoReason.desc
 
-        response = await update_employee_absence_reason_by_id(data['employee_id'], absence_reason_desc)
+        if absence_reason_desc in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
+            response = await update_employee_absence_reason_by_id(data['employee_id'], absence_reason_desc)
 
-        if response.error:
-            await callback.message.answer(text=f'{str(Emoji.Error)} {response.message}')
-            await main_menu_handler(callback.message, state)
-
-        else:
-            if absence_reason_desc == AbsenceReasons.NoReason.desc:
-                await skip_absence_handler(callback, state)
+            if response.error:
+                await callback.message.answer(text=f'{str(Emoji.Error)} {response.message}')
+                await main_menu_handler(callback.message, state)
 
             else:
-                await callback.message.answer(text=f'{str(Emoji.Success)} {response.message}')
-                await main_menu_handler(callback.message, state)
+                if absence_reason_desc == AbsenceReasons.NoReason.desc:
+                    await skip_absence_handler(callback, state)
+
+                else:
+                    await callback.message.answer(text=f'{str(Emoji.Success)} {response.message}')
+                    await main_menu_handler(callback.message, state)
 
     else:
         await filling_out_report_menu_handler(callback.message, state)
 
 
+@user_access
+async def absence_reason_manual_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+
+    if 'choose_dates' in data:
+        start_date = data['start_day_dates']
+
+        start_day = start_date.strftime("%d")
+        month_english = start_date.strftime("%B")
+        month_russian = months[month_english]
+
+        year = start_date.year
+
+        selected_days = f'{start_day} {month_russian} {year} г.\n'
+
+        for key in data.keys():
+            if key.isdigit():
+                day = data[key].strftime("%d")
+                month_english = data[key].strftime("%B")
+                month_russian = months[month_english]
+
+                year = day.year
+
+                selected_days += f'{day} {month_russian} {year} г.\n'
+
+        cancel_inline_kb = await generate_cancel_inline_kb()
+
+        await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
+        await message.answer(text=f'{str(Emoji.CalendarEmoji)} Вы выбрали следующие даты:\n'
+                                  f'{selected_days}\n Введите информацию по этим датам:',
+                             reply_markup=cancel_inline_kb)
+
+    elif 'choose_period' in data:
+        start_date = data['start_day_period']
+
+        start_day = start_date.strftime("%d")
+        start_month_english = start_date.strftime("%B")
+        start_month_russian = months[start_month_english]
+        start_year = start_date.year
+
+        end_date = data['end_day_period']
+        end_day = end_date.strftime("%d")
+        end_month_english = end_date.strftime("%B")
+        end_month_russian = months[end_month_english]
+        end_year = end_date.year
+
+        if start_date > end_date:
+            selected_period = (f'{start_day} {start_month_russian} {start_year} г. - '
+                               f'{end_day} {end_month_russian} {end_year} г.')
+        elif start_date < end_date:
+            selected_period = (f'{end_day} {end_month_russian} {end_year} г. - '
+                               f'{start_day} {start_month_russian} {start_year} г.')
+        else:
+            selected_period = f'{start_day} {start_month_russian} {start_year} г.'
+
+        cancel_inline_kb = await generate_cancel_inline_kb()
+
+        await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
+        await message.answer(text=f'{str(Emoji.CalendarEmoji)} Вы выбрали следующий период:\n'
+                                  f'{selected_period}\n Введите информацию по этому периоду:',
+                             reply_markup=cancel_inline_kb)
+
+
+@filling_out_report_router.message(FillingOutReportStates.enter_absence_reason_manual)
+@user_access
+async def enter_absence_reason_manual_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+
+    if message.text and cleanup(message.text).lower() == 'отмена':
+        await main_menu_handler(message, state)
+
+    elif 'employee_id' in data:
+        response = await update_employee_absence_reason_by_id(data['employee_id'], message.text)
+
+        if response.error:
+            await message.answer(text=f'{str(Emoji.Error)} {response.message}')
+            await main_menu_handler(message, state)
+
+        else:
+            await message.answer(text=f'{str(Emoji.Success)} {response.message}')
+            await main_menu_handler(message, state)
+
+
 @filling_out_report_router.message(FillingOutReportStates.enter_actual_performance)
 @user_access
-async def filling_out_actual_performance(message: Message, state: FSMContext):
+async def enter_actual_performance_handler(message: Message, state: FSMContext):
     if message.text and cleanup(message.text).lower() == 'отмена':
         await main_menu_handler(message, state)
     else:
@@ -263,7 +390,7 @@ async def obtained_result_handler(callback: CallbackQuery, state: FSMContext):
 
 @filling_out_report_router.message(FillingOutReportStates.enter_document_name)
 @user_access
-async def document_name_handler(message: Message, state: FSMContext):
+async def enter_document_name_handler(message: Message, state: FSMContext):
     if message.text and cleanup(message.text).lower() == 'отмена':
         await main_menu_handler(message, state)
     else:
