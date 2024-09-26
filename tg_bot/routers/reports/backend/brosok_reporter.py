@@ -7,13 +7,13 @@ import locale
 from database.models.Employee import Employee
 from database.models.ReportData import ReportData
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
+from tg_bot.routers.reports.backend.filling_out_report_backend import get_current_work_period
 
 
 class BrosokReporter:
     def __init__(self):
         self.workbook = xlwt.Workbook()
         self.bytes_output = BytesIO()
-        self.reporting_week = [3, 4, 5, 6, 0, 1, 2]
         self.months_translate = {
             'January': 'января', 'February': 'февраля', 'March': 'марта', 'April': 'апреля',
             'May': 'мая', 'June': 'июня', 'July': 'июля', 'August': 'августа',
@@ -71,11 +71,7 @@ class BrosokReporter:
     def __get_status(self, absence_reason_desc: str):
         if absence_reason_desc in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
 
-            weekday = datetime.today().weekday()
-            index = self.reporting_week.index(weekday)
-
-            start_week = datetime.today() - timedelta(days=index)
-            end_week = datetime.today() + timedelta(days=len(self.reporting_week) - 1 - index)
+            start_week, end_week = get_current_work_period()
 
             start_month_en = start_week.strftime("%B")
             end_month_en = end_week.strftime("%B")
@@ -85,8 +81,9 @@ class BrosokReporter:
 
             status = (f'{absence_reason_desc} с "{start_week.strftime("%d")}" {start_month_ru} '
                       f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
+
         else:
-            status = ''
+            status = absence_reason_desc
 
         return status
 

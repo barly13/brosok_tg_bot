@@ -1,14 +1,24 @@
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 
 from tg_bot.settings import users_dict_ids
 
 
 def user_access(function):
-    async def wrapper(message: Message, state: FSMContext):
-        if message.chat.id in users_dict_ids.values():
-            await function(message, state)
+    async def wrapper(event, state: FSMContext):
+        if isinstance(event, Message):
+            chat_id = event.chat.id
+        elif isinstance(event, CallbackQuery):
+            chat_id = event.message.chat.id
         else:
-            await message.answer('Доступ к боту вам запрещен')
+            return
+
+        if chat_id in users_dict_ids.values():
+            await function(event, state)
+        else:
+            if isinstance(event, Message):
+                await event.answer('Доступ к боту вам запрещен')
+            elif isinstance(event, CallbackQuery):
+                await event.message.answer('Доступ к боту вам запрещен')
 
     return wrapper

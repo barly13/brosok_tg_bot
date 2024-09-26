@@ -1,10 +1,10 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 
 from tg_bot.functions import cleanup
-from tg_bot.routers.main.keyboard import generate_reply_kb_for_main_menu
+from tg_bot.routers.main.keyboard import generate_inline_kb_for_main_menu
 from tg_bot.routers.main.main_backend import init_jobs
 from tg_bot.security import user_access
 
@@ -18,9 +18,9 @@ base_main_router = Router()
 async def main_menu_handler(message: Message, state: FSMContext):
     if message.text.lower() == '/start':
         await message.answer(f'{str(Emoji.Success)} Бот готов к использованию!',
-                             reply_markup=generate_reply_kb_for_main_menu())
-    else:
-        await message.answer(f'Главное меню', reply_markup=generate_reply_kb_for_main_menu())
+                             reply_markup=ReplyKeyboardRemove())
+
+    await message.answer(f'Главное меню', reply_markup=generate_inline_kb_for_main_menu())
 
     await init_jobs()
     await state.clear()

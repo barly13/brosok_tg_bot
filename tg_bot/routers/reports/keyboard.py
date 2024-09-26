@@ -6,6 +6,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from database.models.Employee import Employee
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from datetime import datetime, timedelta
+
+from tg_bot.routers.reports.backend.filling_out_report_backend import get_current_work_period
 from tg_bot.static.emojis import Emoji
 
 
@@ -56,15 +58,7 @@ def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True, f
 
     days_of_week = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
-    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-
-    today_weekday = today.weekday()
-    if today_weekday > 2:
-        start_date = today - timedelta(days=today_weekday - 3)
-        end_date = today + timedelta(days=3 - today_weekday + 6)
-    else:
-        start_date = today + timedelta(days=2 - today_weekday - 6)
-        end_date = today + timedelta(days=2 - today_weekday)
+    start_date, end_date = get_current_work_period()
 
     calendar_keyboard_builder = InlineKeyboardBuilder()
 
