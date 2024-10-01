@@ -4,28 +4,36 @@ from database.models.Employee import Employee
 from database.models.ReportData import ReportData
 from response import Response
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 
-async def get_all_employees():
+async def get_all_employees() -> Response:
     try:
         return Response(value=Employee.get_all())
     except Exception as exp:
         return Response(message=f'Не удалось получить сотрудников для составление отчета: {exp}', error=True)
 
 
-async def get_employee_by_id(id: int):
+async def get_employee_by_id(employee_id: int) -> Response:
     try:
-        return Response(value=Employee.get_by_id(id))
+        return Response(value=Employee.get_by_id(employee_id))
     except Exception as exp:
         return Response(message=f'Не удалось получить данные о сотруднике: {exp}', error=True)
 
 
-async def update_employee_absence_reason_by_id(id: int, absence_reason: str):
-    if Employee.update(object_id=id, absence_reason=absence_reason):
+async def update_employee_absence_reason_by_id(employee_id: int, absence_reason: str) -> Response:
+    if Employee.update(object_id=employee_id, absence_reason=absence_reason):
         return Response(message='Причина отсутствия записана')
 
     return Response(message='Не удалось обновить причину отсутствия сотрудника', error=True)
+
+
+# async def update_absence_period_or_dates_by_id(employee_id: int, absence_period_or_dates: Dict[str, str]) -> Response:
+#     # dict to json
+#     if Employee.update(object_id=employee_id, absence_period_or_dates=absence_period_or_dates):
+#         return Response(message='Даты или период отсутствия записаны')
+#
+#     return Response(message='Не удалось обновить даты или период отсутствия', error=True)
 
 
 async def get_all_report_data():
@@ -70,12 +78,3 @@ def get_current_work_period() -> Tuple[datetime, datetime]:
         end_date = today + timedelta(days=2 - today_weekday)
 
     return start_date, end_date
-
-
-def create_mock_callback_from_message(message: Message) -> CallbackQuery:
-    return CallbackQuery(
-        id='mock',
-        from_user=message.from_user,
-        chat_instance='',
-        message=message
-    )

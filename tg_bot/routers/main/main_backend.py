@@ -3,7 +3,7 @@ from database.models.Employee import Employee
 from tg_bot.routers.reports.backend import get_report_backend
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from tg_bot.routers.reports.backend.filling_out_report_backend import get_employee_by_id
-from tg_bot.settings import bot, users_dict_ids
+from tg_bot.settings import BOT, USERS_DICT_IDS
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -22,10 +22,10 @@ scheduler = AsyncIOScheduler(executor=executor)
 
 async def delete_all_data():
     employee_id = 13
-    employee_tg_id = users_dict_ids.get(employee_id)
+    employee_tg_id = USERS_DICT_IDS.get(employee_id)
     try:
         excel_report = await get_report_backend.get_excel_report()
-        await bot.send_document(employee_tg_id, excel_report, caption='Отчет')
+        await BOT.send_document(employee_tg_id, excel_report, caption='Отчет')
     except Exception as exp:
         print(f'Ошибка в формировании отчета перед удалением: {exp}')
 
@@ -34,12 +34,12 @@ async def delete_all_data():
 
 
 async def send_reminder_ro_all_employees():
-    for employee_id, employee_tg_id in users_dict_ids.items():
+    for employee_id, employee_tg_id in USERS_DICT_IDS.items():
         try:
             response = await get_employee_by_id(employee_id)
-            await bot.send_message(
+            await BOT.send_message(
                 chat_id=employee_tg_id,
-                text=f'{str(Emoji.Waiting)} Уведомление: {response.value.full_name}, '
+                text=f'{str(Emoji.FourAndHalfAM)} Уведомление: {response.value.full_name}, '
                      f'заполните данные для отчета!'
             )
         except Exception as e:
@@ -57,13 +57,13 @@ async def check_if_data_filled(employee_id: int):
 
 
 async def send_reminder_to_incomplete_employees():
-    for employee_id, employee_tg_id in users_dict_ids.items():
+    for employee_id, employee_tg_id in USERS_DICT_IDS.items():
         try:
             is_data_filled = await check_if_data_filled(employee_id)
             if not is_data_filled:
                 response = await get_employee_by_id(employee_id)
-                await bot.send_message(chat_id=employee_tg_id,
-                                       text=f'{str(Emoji.Waiting)} Повторное уведомление: {response.value.full_name}, '
+                await BOT.send_message(chat_id=employee_tg_id,
+                                       text=f'{str(Emoji.SixAM)} Повторное уведомление: {response.value.full_name}, '
                                             f'срочно заполните данные!')
         except Exception as e:
             print(f'Ошибка отправки уведомления {employee_id}: {e}')
@@ -72,9 +72,9 @@ async def send_reminder_to_incomplete_employees():
 
 async def send_reminder_to_reporter():
     employee_id = 12
-    employee_tg_id = users_dict_ids.get(employee_id)
+    employee_tg_id = USERS_DICT_IDS.get(employee_id)
     response = await get_employee_by_id(employee_id)
-    await bot.send_message(chat_id=employee_tg_id, text=f'{str(Emoji.Waiting)} '
+    await BOT.send_message(chat_id=employee_tg_id, text=f'{str(Emoji.TwoAM)} '
                                                         f'Уведомление: {response.value.full_name}, сформируйте отчет!')
 
 
@@ -83,11 +83,11 @@ async def init_jobs():
         scheduler.remove_all_jobs()
 
         # 1. Удаление всех данных в четверг в 00:00
-        scheduler.add_job(delete_all_data, trigger=CronTrigger(day_of_week='thu', hour=14, minute=21),
+        scheduler.add_job(delete_all_data, trigger=CronTrigger(day_of_week='thu', hour=0, minute=0),
                           misfire_grace_time=60)
 
-        # 2. Отправка всем уведомлений во вторник в 16:45
-        scheduler.add_job(send_reminder_ro_all_employees, trigger=CronTrigger(day_of_week='tue', hour=16, minute=45),
+        # 2. Отправка всем уведомлений во вторник в 16:30
+        scheduler.add_job(send_reminder_ro_all_employees, trigger=CronTrigger(day_of_week='tue', hour=16, minute=30),
                           misfire_grace_time=60)
 
         # 3. Повторное уведомление во вторник в 18:00 тем, кто не заполнил данные

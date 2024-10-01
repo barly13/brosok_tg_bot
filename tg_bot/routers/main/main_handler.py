@@ -17,7 +17,7 @@ base_main_router = Router()
 @user_access
 async def main_menu_handler(message: Message, state: FSMContext):
     if message.text.lower() == '/start':
-        await message.answer(f'{str(Emoji.Success)} Бот готов к использованию!',
+        await message.answer('',
                              reply_markup=ReplyKeyboardRemove())
 
     await message.answer(f'Главное меню', reply_markup=generate_inline_kb_for_main_menu())

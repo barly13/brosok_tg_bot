@@ -13,6 +13,7 @@ from tg_bot.static.emojis import Emoji
 
 def generate_inline_kb_for_employees_list(employees: typing.List[Employee]):
     employees_list_kb = InlineKeyboardBuilder()
+
     for employee in employees:
         employees_list_kb.button(text=f'{employee.full_name}', callback_data=f'employee_{employee.id}')
 
@@ -22,6 +23,7 @@ def generate_inline_kb_for_employees_list(employees: typing.List[Employee]):
 
 def generate_inline_kb_for_absence_reasons():
     absence_reasons_kb = InlineKeyboardBuilder()
+
     for absence_reason in AbsenceReasons:
         absence_reasons_kb.button(text=f'{absence_reason.desc}', callback_data=f'absence_reason__{absence_reason.num}')
 
@@ -192,11 +194,3 @@ def generate_cancel_inline_kb():
 
     return cancel_inline_kb.as_markup()
 
-
-def generate_note_inline_kb():
-    note_inline_kb = InlineKeyboardBuilder()
-
-    note_inline_kb.button(text=f'Пропустить {str(Emoji.RightArrowEmoji)}', callback_data='skip_note')
-    note_inline_kb.button(text=f'{str(Emoji.Error)} Отмена', callback_data='cancel_all')
-
-    return note_inline_kb.as_markup()

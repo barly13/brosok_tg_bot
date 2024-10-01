@@ -1,7 +1,7 @@
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
-from tg_bot.settings import users_dict_ids
+from tg_bot.settings import USERS_DICT_IDS
 
 
 def user_access(function):
@@ -13,7 +13,7 @@ def user_access(function):
         else:
             return
 
-        if chat_id in users_dict_ids.values():
+        if chat_id in USERS_DICT_IDS.values():
             await function(event, state)
         else:
             if isinstance(event, Message):

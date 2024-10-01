@@ -12,5 +12,7 @@ def generate_inline_kb_for_main_menu():
     main_menu_kb.row(InlineKeyboardButton(text=f'{str(Emoji.ReportMenu)} Получить отчет', callback_data='get_report'))
     main_menu_kb.row(InlineKeyboardButton(text=f'{str(Emoji.RobotEmoji)} Инструкция по использованию',
                                           callback_data='get_instructions'))
+    main_menu_kb.row(InlineKeyboardButton(text=f'{str(Emoji.MakerEmoji)} Написать в поддержку',
+                                          callback_data='get_maker_contact'))
 
     return main_menu_kb.as_markup()
