@@ -1,7 +1,7 @@
 import typing
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.models.Employee import Employee
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
@@ -42,9 +42,8 @@ def bold_numbers(number):
 def generate_period_or_dates_inline_kb():
     period_or_dates_kb = InlineKeyboardBuilder()
 
-    period_or_dates_kb.row(InlineKeyboardButton(text=f'{str(Emoji.CalendarEmoji)} - {str(Emoji.CalendarEmoji)} '
-                                                     f'Выбрать период отсутствия.',
-                                                callback_data='choose_period'))
+    period_or_dates_kb.row(InlineKeyboardButton(text=f'{str(Emoji.PeriodEmoji)} Выбрать период отсутствия',
+                                                callback_data='choose_periods'))
     period_or_dates_kb.row(InlineKeyboardButton(text=f'{str(Emoji.CalendarEmoji)} Выбрать отдельные даты',
                                                 callback_data='choose_dates'))
     period_or_dates_kb.row(InlineKeyboardButton(text=f'{str(Emoji.RightArrowEmoji)} Пропустить',
@@ -52,6 +51,20 @@ def generate_period_or_dates_inline_kb():
     period_or_dates_kb.row(InlineKeyboardButton(text=f'{str(Emoji.Error)} Отмена', callback_data='cancel_all'))
 
     return period_or_dates_kb.as_markup()
+
+
+def generate_re_select_period_inline_kb():
+    re_select_period_kb = InlineKeyboardBuilder()
+
+    re_select_period_kb.row(InlineKeyboardButton(text=f'{str(Emoji.PeriodEmoji)} Выбрать еще период',
+                                                 callback_data='choose_periods'))
+    re_select_period_kb.row(InlineKeyboardButton(text=f'{str(Emoji.CalendarEmoji)} Выбрать еще даты',
+                                                 callback_data='choose_dates'))
+    re_select_period_kb.row(InlineKeyboardButton(text=f'{str(Emoji.DownArrowEmoji)} Продолжить',
+                                                 callback_data='continue_filling_in'))
+    re_select_period_kb.row(InlineKeyboardButton(text=f'{str(Emoji.Error)} Отмена', callback_data='cancel_all'))
+
+    return re_select_period_kb.as_markup()
 
 
 def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True, first_date_selected: bool = False):

@@ -39,7 +39,7 @@ async def send_reminder_ro_all_employees():
             response = await get_employee_by_id(employee_id)
             await BOT.send_message(
                 chat_id=employee_tg_id,
-                text=f'{str(Emoji.FourAndHalfAM)} Уведомление: {response.value.full_name}, '
+                text=f'{str(Emoji.FourAndHalfPM)} Уведомление: {response.value.full_name}, '
                      f'заполните данные для отчета!'
             )
         except Exception as e:
@@ -63,7 +63,7 @@ async def send_reminder_to_incomplete_employees():
             if not is_data_filled:
                 response = await get_employee_by_id(employee_id)
                 await BOT.send_message(chat_id=employee_tg_id,
-                                       text=f'{str(Emoji.SixAM)} Повторное уведомление: {response.value.full_name}, '
+                                       text=f'{str(Emoji.SixPM)} Повторное уведомление: {response.value.full_name}, '
                                             f'срочно заполните данные!')
         except Exception as e:
             print(f'Ошибка отправки уведомления {employee_id}: {e}')
@@ -74,7 +74,7 @@ async def send_reminder_to_reporter():
     employee_id = 12
     employee_tg_id = USERS_DICT_IDS.get(employee_id)
     response = await get_employee_by_id(employee_id)
-    await BOT.send_message(chat_id=employee_tg_id, text=f'{str(Emoji.TwoAM)} '
+    await BOT.send_message(chat_id=employee_tg_id, text=f'{str(Emoji.TwoPM)} '
                                                         f'Уведомление: {response.value.full_name}, сформируйте отчет!')
 
 

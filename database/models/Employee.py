@@ -14,7 +14,7 @@ class Employee(BaseModel):
     position = Column(String, nullable=False)
     working_rate = Column(Float, nullable=False)
     absence_reason = Column(String, nullable=False, default=AbsenceReasons.NoReason.desc)
-    # absence_period_or_dates = Column(JSON, nullable=False)
+    # absence_period_or_dates = Column(JSON, nullable=False, default={'no_data': ''})
 
     @classmethod
     def update_all_absence_reasons(cls):
@@ -24,8 +24,3 @@ class Employee(BaseModel):
         )
 
         session.commit()
-
-    # @classmethod
-    # def update_absence_dates(cls, period: List[datetime] = None, dates: List[datetime] = None):
-    #     if period and len(period) == 2:
-    #         cls.

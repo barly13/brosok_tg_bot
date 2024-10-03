@@ -2,20 +2,19 @@ from enum import Enum
 
 
 class AbsenceReasons(Enum):
-    NoReason = (0, 'Работа')
-    Vacation = (1, 'Отпуск')
-    Sickness = (2, 'Больничный')
-    BusinessTrip = (3, 'Командировка')
+    NoReason = ('no_reason', 'Работа')
+    Vacation = ('vacation', 'Отпуск')
+    Sickness = ('sickness', 'Больничный')
+    BusinessTrip = ('business_trip', 'Командировка')
 
-    def __init__(self, num: int, desc: str):
-        self.num = num
+    def __init__(self, callback_info: str, desc: str):
+        self.callback_info = callback_info
         self.desc = desc
 
     @classmethod
-    def get_desc_from_num(cls, num: int) -> str:
+    def get_description_from_callback_info(cls, callback_info: str) -> str:
         for absence_reason in cls:
-            if absence_reason.num == num:
+            if absence_reason.callback_info == callback_info:
                 return absence_reason.desc
 
         return cls.NoReason.desc
-
