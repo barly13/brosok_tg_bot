@@ -1,6 +1,6 @@
 import json
 
-from aiogram.types import CallbackQuery, Message
+import re
 
 from database.models.Employee import Employee
 from database.models.ReportData import ReportData
@@ -152,8 +152,10 @@ def generate_dates_text_and_absence_dates(data: Dict[str, Any]) -> Tuple[str, st
     selected_days = f'{start_day} {start_month} {start_year} г.\n'
     formatted_days = f'"{start_day}" {start_month} {start_year} г. - (), '
 
+    date_pattern = re.compile(r'^\d{2}\.\d{2}\.\d{4}$')
+
     for key in data.keys():
-        if key.isdigit():
+        if date_pattern.match(key):
             date = data[key]
             absence_dates.append(date)
 
@@ -195,12 +197,8 @@ def generate_period_text(start_dates: List[datetime], end_dates: List[datetime])
     return selected_periods, formatted_periods
 
 
-def get_partial_date_ranges(start_date: datetime, end_date: datetime,
-                            work_date_range_set: Set[datetime]):
-    min_start_date = min(work_date_range_set) if start_date < min(work_date_range_set) else None
-    max_end_date = max(work_date_range_set) if end_date > max(work_date_range_set) else None
-
-    return min_start_date, max_end_date
+def get_partial_end_date(end_date: datetime, work_date_range_set: Set[datetime]):
+    return max(work_date_range_set) if end_date > max(work_date_range_set) else None
 
 
 def get_partial_start_date(start_date: datetime, work_date_range_set: Set[datetime]):
@@ -221,10 +219,6 @@ def get_absence_date_sets(data: Dict[str, Any]):
 
 def get_final_employee_info(data: Dict[str, Any]) -> str:
     employee_info = ''
-
-    for key, value in data.items():
-        if key != 'employee_id' and key in report_data_dict.keys():
-            pass
 
     for key, value in data.items():
         if key != 'employee_id' and key in report_data_dict.keys():
