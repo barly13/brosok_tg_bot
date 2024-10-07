@@ -106,10 +106,10 @@ def get_dates_range(data: Dict[str, Any]):
 
 
 def get_date_sets(start_date: datetime, end_date: datetime) -> Tuple[Set[datetime], Set[datetime]]:
-    date_range_set = set(create_date_range(start_date, end_date))
-    work_date_set = set(create_date_range(*get_current_work_period()))
+    dates_range_set = set(create_date_range(start_date, end_date))
+    work_dates_set = set(create_date_range(*get_current_work_period()))
 
-    return date_range_set, work_date_set
+    return dates_range_set, work_dates_set
 
 
 def format_period(start_date: datetime, end_date: datetime):
