@@ -11,6 +11,7 @@ class Emoji(Enum):
     MainMenu = '🏠'
     ReportMenu = '🧾'
     ShowText = '👁'
+    MoreEmoji = '💬'
     Start = '▶️'
     Stop = '⏸️'
     EditText = '✏️'

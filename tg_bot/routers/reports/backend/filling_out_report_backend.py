@@ -8,11 +8,24 @@ from response import Response
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any, Set, Optional
 
-months = {
+from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
+
+english_to_russians_months = {
     'January': 'января', 'February': 'февраля', 'March': 'марта',
     'April': 'апреля', 'May': 'мая', 'June': 'июня',
     'July': 'июля', 'August': 'августа', 'September': 'сентября',
     'October': 'октября', 'November': 'ноября', 'December': 'декабря'
+}
+
+russian_to_english_months = {
+    'января': 'January', 'февраля': 'February', 'марта': 'March',
+    'апреля': 'April', 'мая': 'May', 'июня': 'June', 'июля': 'July',
+    'августа': 'August', 'сентября': 'September', 'октября': 'October',
+    'ноября': 'November', 'декабря': 'December'
+}
+
+weekday_to_deltas = {
+    3: 6, 4: 5, 5: 4, 6: 3, 0: 2, 1: 1, 2: 0
 }
 
 report_data_dict = {'actual_performance': '"Выполненные работы"', 'absence_periods': '"Период(ы) отсутствия"',
@@ -41,15 +54,6 @@ async def update_employee_absence_reason_by_id(employee_id: int, absence_reason:
     return Response(message='Не удалось обновить причину отсутствия сотрудника', error=True)
 
 
-async def update_absence_period_or_dates_by_id(employee_id: int, absence_period_or_dates: Dict[str, Tuple]) -> Response:
-    absence_period_or_dates_json = json.dumps(absence_period_or_dates)
-
-    if Employee.update(object_id=employee_id, absence_period_or_dates=absence_period_or_dates_json):
-        return Response(message='Даты или период отсутствия записаны')
-
-    return Response(message='Не удалось обновить даты или период отсутствия!', error=True)
-
-
 async def get_all_report_data():
     try:
         return Response(value=ReportData.get_all())
@@ -67,6 +71,14 @@ async def add_report_data(actual_performance: str, obtained_result: str, employe
         return Response(message='Запись в отчет успешно создана')
     except Exception as exp:
         return Response(message=f'Не удалось сохранить данные для отчета: {exp}', error=True)
+
+
+def get_new_date_and_work_dates_set(callback_data: str) -> Tuple[datetime, Set[datetime]]:
+    year, month, day = map(int, callback_data.split(':')[1:])
+    new_date = datetime(int(year), int(month), int(day))
+    work_dates_set = set(create_date_range(*get_current_work_period()))
+
+    return new_date, work_dates_set
 
 
 def create_date_range(start_date: datetime, end_date: datetime) -> List[datetime]:
@@ -126,7 +138,7 @@ def format_period(start_date: datetime, end_date: datetime):
 
 def format_date(date: datetime, is_same_year: bool = True) -> str:
     day = date.strftime('%d')
-    month = months[date.strftime('%B')]
+    month = english_to_russians_months[date.strftime('%B')]
 
     if is_same_year:
         return f'"{day}" {month}'
@@ -138,38 +150,227 @@ def format_date(date: datetime, is_same_year: bool = True) -> str:
 
 def get_day_month_year(date: datetime) -> Tuple[str, str, int]:
     day = date.strftime('%d')
-    month = months[date.strftime('%B')]
+    month = english_to_russians_months[date.strftime('%B')]
     year = date.year
 
     return day, month, year
 
 
-def generate_dates_text_and_absence_dates(data: Dict[str, Any]) -> Tuple[str, str, List[datetime]]:
-    absence_dates = [data['start_day_dates']]
-
+def generate_dates_text(data: Dict[str, Any]) -> Tuple[str, str, List[datetime]]:
     start_day, start_month, start_year = get_day_month_year(data['start_day_dates'])
+    formatted_dates = [data['start_day_dates']]
 
     selected_days = f'{start_day} {start_month} {start_year} г.\n'
     formatted_days = f'"{start_day}" {start_month} {start_year} г. - (), '
 
-    date_pattern = re.compile(r'^\d{2}\.\d{2}\.\d{4}$')
+    date_pattern = re.compile(r'^\d{1,2}\.\d{1,2}\.\d{4}$')
 
     for key in data.keys():
         if date_pattern.match(key):
             date = data[key]
-            absence_dates.append(date)
-
             day, month, year = get_day_month_year(date)
 
             selected_days += f'{day} {month} {year} г.\n'
             formatted_days += f'"{day}" {month} {year} г. - (), '
+            formatted_dates.append(data[key])
 
-    formatted_days = formatted_days[:len(formatted_days) - 2]
-    return selected_days, formatted_days, absence_dates
+    formatted_days = formatted_days.rstrip(', ')
+    return selected_days, formatted_days, formatted_dates
 
 
-def generate_period_text(start_dates: List[datetime], end_dates: List[datetime]) -> Tuple[str, str]:
+def generate_absence_reason_full_desc(start_date: datetime, end_date: datetime, min_end_date: datetime,
+                                      absence_reason_desc) -> str:
+    if start_date == min_end_date:
+        absence_reason_full_desc = absence_reason_desc + f' {format_date(start_date, is_same_year=False)}|'
+        absence_after_work_period = False
+
+    elif start_date < min_end_date:
+        if start_date.year == min_end_date.year:
+            start_period_text = format_date(start_date)
+
+        else:
+            start_period_text = format_date(start_date, is_same_year=False)
+
+        absence_reason_full_desc = absence_reason_desc + f' с {start_period_text}'
+        end_period_text = format_date(min_end_date, is_same_year=False)
+        absence_reason_full_desc += f' по {end_period_text}|'
+        absence_after_work_period = False
+
+    else:
+        absence_reason_full_desc = f'{AbsenceReasons.NoReason.desc}|'
+        absence_after_work_period = True
+
+    after_period_start_date = min_end_date + timedelta(days=1)
+
+    while after_period_start_date <= end_date:
+        if after_period_start_date == end_date:
+            absence_reason_full_desc += absence_reason_desc + f' {format_date(after_period_start_date, 
+                                                                              is_same_year=False)}|'
+            break
+
+        after_period_end_date = after_period_start_date + timedelta(days=6)
+        if (start_date not in set(create_date_range(after_period_start_date, after_period_end_date))
+                and absence_after_work_period):
+            absence_reason_full_desc += f'{AbsenceReasons.NoReason.desc}|'
+            after_period_start_date += timedelta(days=7)
+            continue
+
+        absence_after_work_period = False
+
+        if after_period_end_date < end_date:
+            if start_date in set(create_date_range(after_period_start_date, after_period_end_date)):
+                if start_date.year == after_period_end_date.year:
+                    after_period_start_text = format_date(start_date)
+
+                else:
+                    after_period_start_text = format_date(start_date, is_same_year=False)
+
+            else:
+                if after_period_start_date.year == after_period_end_date.year:
+                    after_period_start_text = format_date(after_period_start_date)
+
+                else:
+                    after_period_start_text = format_date(after_period_start_date, is_same_year=False)
+
+            absence_reason_full_desc += absence_reason_desc + f' с {after_period_start_text}'
+            after_period_end_text = format_date(after_period_end_date, is_same_year=False)
+            absence_reason_full_desc += f' по {after_period_end_text}|'
+
+        else:
+            if start_date in set(create_date_range(after_period_start_date, end_date)):
+                if start_date.year == end_date.year:
+                    after_period_start_text = format_date(start_date)
+
+                else:
+                    after_period_start_text = format_date(start_date, is_same_year=False)
+
+            else:
+                if after_period_start_date.year == end_date.year:
+                    after_period_start_text = format_date(after_period_start_date)
+
+                else:
+                    after_period_start_text = format_date(after_period_start_date, is_same_year=False)
+
+            absence_reason_full_desc += absence_reason_desc + f' с {after_period_start_text}'
+            after_period_end_text = format_date(end_date, is_same_year=False)
+            absence_reason_full_desc += f' по {after_period_end_text}|'
+            break
+
+        after_period_start_date += timedelta(days=7)
+
+    return absence_reason_full_desc.rstrip('|')
+
+
+def get_week_start(date: datetime) -> datetime:
+    offset = (date.weekday() - 3) % 7
+    return date - timedelta(days=offset)
+
+
+def parse_absence_dates_and_periods(absence_dates_and_periods_str: str,
+                                    formatted_dates_and_periods: List[Any]):
+    min_end_date = max(set(create_date_range(*get_current_work_period())))
+    dates_and_periods = []
+
+    for absence_str_parts, formatted_item in zip(absence_dates_and_periods_str.split(', '),
+                                                 formatted_dates_and_periods):
+        if '-' in absence_str_parts:
+            dates_and_periods.append((absence_str_parts.split('-')[1].strip(), formatted_item))
+        else:
+            dates_and_periods.append((absence_str_parts.split(' с ')[0].strip(), formatted_item))
+
+    dates_and_periods.sort(key=lambda x: x[1] if isinstance(x[1], datetime) else x[1][1])
+
+    current_week_start = None
+    week_absences = []
+    result_string = ''
+
+    for date_or_period in dates_and_periods:
+        if isinstance(date_or_period[1], tuple):
+            start_date, end_date = date_or_period[1]
+        else:
+            start_date = date_or_period[1]
+            end_date = start_date
+
+        if current_week_start is None or get_week_start(start_date) != current_week_start:
+            if week_absences:
+                result_string += ", ".join(week_absences) + "|"
+                week_absences = []
+
+            current_week_start = get_week_start(start_date)
+
+        if isinstance(date_or_period[1], tuple):
+            absence_reason_full_desc = generate_absence_reason_full_desc(start_date, end_date,
+                                                                         min_end_date if end_date >= min_end_date else
+                                                                         end_date,
+                                                                         date_or_period[0])
+
+        else:
+            absence_reason_full_desc = f'{format_date(date_or_period[1], is_same_year=False)} - {date_or_period[0]}'
+
+        week_absences.append(absence_reason_full_desc)
+
+    if week_absences:
+        result_string += ", ".join(week_absences) + "|"
+
+    print(result_string.rstrip('|'))
+
+    # return result_string.rstrip('|')
+        #     if end_date < min_end_date:
+        #         absence_reason_full_desc = generate_absence_reason_full_desc(start_date, end_date,
+        #                                                                      end_date, date_or_period[0])
+        #     else:
+        #         absence_reason_full_desc = generate_absence_reason_full_desc(start_date, end_date,
+        #                                                                      min_end_date, date_or_period[0])
+        #
+        #     print(absence_reason_full_desc)
+        #
+        # else:
+        #     absence_reason_full_desc = f'{format_date(date_or_period[1], is_same_year=False)} - {date_or_period[0]}'
+        #     print(absence_reason_full_desc)
+
+    # if '-' in absence_str_parts:
+    #     print(absence_str_parts.split('-')[1].strip(), formatted_item)
+    # else:
+    #     start_date, end_date = formatted_item
+    #     print(absence_str_parts.split(' с ')[0].strip(), start_date, end_date)
+#
+#     result_parts = []
+#     for absence_str_parts in absence_dates_and_periods_str.split(', '):
+#         if ' с ' in absence_str_parts:
+#             period = absence_str_parts.split(' с ')[1]
+#             start_date, end_date = parse_date_period(period)
+#
+#         else:
+#             start_date = end_date = parse_single_date(absence_str_parts.split('-')[0])
+#
+#         current_part = ''
+#         if start_date <= max(work_dates_set):
+#             period_range = create_date_range(start_date, min(end_date, max(work_dates_set)))
+#             if len(period_range) == 1:
+#                 pass
+#             else:
+#                 current_part = absence_str_parts.split('-')[0] + ' с ' + period_range[]
+#
+#     absence_reason_full_desc = ''
+#     for absence_str_parts in absence_dates_and_periods_str.split(', '):
+#         if '-' in absence_str_parts:
+#             for absence_str in absence_str_parts.split('-'):
+#                 current_date = parse_single_date(absence_str[0])
+#                 if current_date > max(work_dates_set):
+#                     if max(work_dates_set) - current_date > timedelta(days=6):
+#                         pass
+#
+#                 else:
+#                     pass
+#             print(parse_single_date([m.strip() for m in absence_str_parts.split('-')][0]))
+#         else:
+#             print(parse_date_period([m.strip() for m in absence_str_parts.split(' с ')][1]))
+
+
+def generate_period_text(start_dates: List[datetime], end_dates: List[datetime],
+                         formatted_periods: List[Any] | None = None) -> Tuple[str, str, List[Any]]:
     selected_period_list, formatted_period_list = [], []
+    formatted_periods_and_dates = formatted_periods if formatted_periods else []
 
     for start_date, end_date in zip(start_dates, end_dates):
         start_day, start_month, start_year = get_day_month_year(start_date)
@@ -179,22 +380,23 @@ def generate_period_text(start_dates: List[datetime], end_dates: List[datetime])
             selected_period = f'{start_day} {start_month} {start_year} г. - {end_day} {end_month} {end_year} г.'
 
             if start_year == end_year:
-                formatted_period = f'() c "{start_day}" {start_month} по "{end_day}" {end_month} {end_year} г.'
+                formatted_period = f'() с "{start_day}" {start_month} по "{end_day}" {end_month} {end_year} г.'
             else:
-                formatted_period = (f'() c "{start_day}" {start_month} {start_year} г. по '
+                formatted_period = (f'() с "{start_day}" {start_month} {start_year} г. по '
                                     f'"{end_day}" {end_month} {end_year} г.')
 
         else:
             selected_period = f'{start_day} {start_month} {start_year} г.'
             formatted_period = f'() "{end_day}" {end_month} {start_year} г.'
 
+        formatted_periods_and_dates.append((start_date, end_date))
         selected_period_list.append(selected_period)
         formatted_period_list.append(formatted_period)
 
     selected_periods = '\n'.join(selected_period_list)
     formatted_periods = ', '.join(formatted_period_list)
 
-    return selected_periods, formatted_periods
+    return selected_periods, formatted_periods, formatted_periods_and_dates
 
 
 def get_partial_end_date(end_date: datetime, work_date_range_set: Set[datetime]):
@@ -223,11 +425,10 @@ def get_final_employee_info(data: Dict[str, Any]) -> str:
     for key, value in data.items():
         if key != 'employee_id' and key in report_data_dict.keys():
             if key == 'absence_periods':
-                for date_tuple in value:
-                    start_date_period = date_tuple[0].strftime("%d.%m.%Y")
-                    end_date_period = date_tuple[1].strftime("%d.%m.%Y")
+                start_date_period = data['absence_periods'][0].strftime("%d.%m.%Y")
+                end_date_period = data['absence_periods'][1].strftime("%d.%m.%Y")
 
-                    employee_info += f'{report_data_dict[key]}: {start_date_period} - {end_date_period}\n'
+                employee_info += f'{report_data_dict[key]}: {start_date_period} - {end_date_period}\n'
 
             if key == 'absence_dates':
                 absence_dates = ''
@@ -241,7 +442,7 @@ def get_final_employee_info(data: Dict[str, Any]) -> str:
 
                 employee_info += f'\n{report_data_dict[key]}: {absence_dates}\n'
 
-            else:
+            if key != 'absence_periods' and key != 'absence_dates':
                 employee_info += f'\n{report_data_dict[key]}: {value}\n'
 
     return employee_info

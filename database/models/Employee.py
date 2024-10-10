@@ -14,13 +14,24 @@ class Employee(BaseModel):
     position = Column(String, nullable=False)
     working_rate = Column(Float, nullable=False)
     absence_reason = Column(String, nullable=False, default=AbsenceReasons.NoReason.desc)
-    # absence_period_or_dates = Column(JSON, nullable=False, default={'no_data': ''})
 
     @classmethod
     def update_all_absence_reasons(cls):
         session = session_controller.get_session()
-        session.execute(
-            update(cls).values(absence_reason=AbsenceReasons.NoReason.desc)
-        )
+
+        all_employees = cls.get_all()
+
+        for employee in all_employees:
+            absence_reason = employee.absence_reason
+            if '|' in absence_reason:
+                parts = absence_reason.split('|')
+                updated_absence_reason = '|'.join(parts[1:])
+                session.execute(
+                    update(cls).where(cls.id == employee.id).values(absence_reason=updated_absence_reason)
+                )
+            else:
+                session.execute(
+                    update(cls).where(cls.id == employee.id).values(absence_reason=AbsenceReasons.NoReason.desc)
+                )
 
         session.commit()

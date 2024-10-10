@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Tuple, List
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
@@ -12,8 +12,9 @@ from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from tg_bot.routers.reports.backend.filling_out_report_backend import get_all_employees, get_employee_by_id, \
     create_date_range, get_current_work_period, update_employee_absence_reason_by_id, add_report_data, \
     get_date_sets, format_period, get_partial_end_date, format_date, get_partial_start_date, \
-    update_absence_period_or_dates_by_id, get_absence_date_sets, generate_dates_text_and_absence_dates, \
-    generate_period_text, get_dates_range, get_final_employee_info
+    get_absence_date_sets, generate_dates_text, \
+    generate_period_text, get_dates_range, get_final_employee_info, get_new_date_and_work_dates_set, \
+    generate_absence_reason_full_desc, parse_absence_dates_and_periods
 from tg_bot.routers.reports.keyboard import generate_inline_kb_for_employees_list, \
     generate_calendar_inline_kb, generate_obtained_result_inline_kb, generate_absence_reason_inline_kb, \
     generate_cancel_inline_kb, generate_final_inline_kb, generate_period_or_dates_inline_kb, \
@@ -50,10 +51,10 @@ async def filling_out_report_menu_handler(callback: CallbackQuery, state: FSMCon
             employees_list_inline_kb = generate_inline_kb_for_employees_list(response.value)
 
             if 'employee_id' in data:
-                await callback.message.edit_text(text=f'{str(Emoji.EmployeeEmoji)} Смените сотрудника из списка:\n',
+                await callback.message.edit_text(text=f'{str(Emoji.EmployeeEmoji)} Смените сотрудника из списка:',
                                                  reply_markup=employees_list_inline_kb)
             else:
-                await callback.message.edit_text(text=f'{str(Emoji.EmployeeEmoji)} Выберите сотрудника в списке:\n',
+                await callback.message.edit_text(text=f'{str(Emoji.EmployeeEmoji)} Выберите сотрудника в списке:',
                                                  reply_markup=employees_list_inline_kb)
 
 
@@ -92,12 +93,20 @@ async def filling_out_employee_report(callback: CallbackQuery, state: FSMContext
 async def choose_periods_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(choose_periods=True)
 
-    today = datetime.today()
-    calendar_markup = generate_calendar_inline_kb(today.year, today.month)
+    data = await state.get_data()
 
-    await callback.message.edit_text(text=f'{str(Emoji.PeriodEmoji)} '
-                                          f'Выберите период отсутствия или нажмите "Пропустить":',
-                                     reply_markup=calendar_markup)
+    today = datetime.today()
+    if 'start_day_dates' in data or '1_period' in data:
+        calendar_markup = generate_calendar_inline_kb(today.year, today.month, first_date_or_period_selected=True)
+        await callback.message.edit_text(text=f'{str(Emoji.PeriodEmoji)} '
+                                              f'Выберите период отсутствия или нажмите "Продолжить":',
+                                         reply_markup=calendar_markup)
+
+    else:
+        calendar_markup = generate_calendar_inline_kb(today.year, today.month)
+        await callback.message.edit_text(text=f'{str(Emoji.PeriodEmoji)} '
+                                              f'Выберите период отсутствия или нажмите "Пропустить":',
+                                         reply_markup=calendar_markup)
 
 
 @filling_out_report_router.callback_query(F.data == 'choose_dates')
@@ -105,86 +114,180 @@ async def choose_periods_handler(callback: CallbackQuery, state: FSMContext):
 async def choose_dates_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(choose_dates=True)
 
-    today = datetime.today()
-    calendar_markup = generate_calendar_inline_kb(today.year, today.month, is_period=False)
+    data = await state.get_data()
 
-    await callback.message.edit_text(text=f'{str(Emoji.CalendarEmoji)} '
-                                          f'Выберите даты отсутствия или нажмите "Пропустить":',
-                                     reply_markup=calendar_markup)
+    today = datetime.today()
+    if 'start_day_dates' in data or '1_period' in data:
+        calendar_markup = generate_calendar_inline_kb(today.year, today.month, is_period=False,
+                                                      first_date_or_period_selected=True)
+        await callback.message.edit_text(text=f'{str(Emoji.CalendarEmoji)} '
+                                              f'Выберите даты отсутствия или нажмите "Продолжить":',
+                                         reply_markup=calendar_markup)
+    else:
+        calendar_markup = generate_calendar_inline_kb(today.year, today.month, is_period=False)
+        await callback.message.edit_text(text=f'{str(Emoji.CalendarEmoji)} '
+                                              f'Выберите даты отсутствия или нажмите "Пропустить":',
+                                         reply_markup=calendar_markup)
+
+
+@filling_out_report_router.callback_query(F.data == 'fill_more')
+async def re_select_periods_or_dates_handler(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    if await check_fullness_of_period(callback, data):
+        return
+
+    re_select_inline_kb = generate_re_select_period_inline_kb()
+
+    await callback.message.edit_text(text=f'{str(Emoji.CheckMarkEmoji)} Выберите (при необходимости) '
+                                          f'еще период/даты отсутствия, либо, если вы уже выбрали '
+                                          f'нужный период нажмите "Продолжить:"',
+                                     reply_markup=re_select_inline_kb)
+
+
+async def check_fullness_of_period(callback: CallbackQuery, data: Dict[str, Any]) -> bool:
+    for key, value in data.items():
+        if key.endswith('_period') and isinstance(value, list) and len(value) == 1:
+            await callback.answer(text=f'{str(Emoji.Warning)} Вы не до конца заполнили период отсутствия. '
+                                       f'Выберите дату окончания периода!',
+                                  show_alert=True)
+
+            return True
+
+    return False
+
+
+async def check_date_is_before_work_dates(callback: CallbackQuery, new_date: datetime, work_dates_set: Set[datetime]) \
+        -> bool:
+    if new_date not in work_dates_set and new_date <= max(work_dates_set):
+        await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату до отчетного периода. Выберите дату, '
+                                   f'находящуюся в отчетном периоде ({str(Emoji.CheckMarkEmoji)}) или после него!',
+                              show_alert=True)
+        return True
+
+    return False
+
+
+async def check_date_is_in_period(callback: CallbackQuery, new_date: datetime, data: Dict[str, Any]) -> bool:
+    for key, value in data.items():
+        if key.endswith('_period') and isinstance(value, list) and len(value) == 2:
+            start_date, end_date = value
+            if start_date <= new_date <= end_date:
+                await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату, которая уже включена '
+                                           f'в другой период. Выберите другую дату!',
+                                      show_alert=True)
+                return True
+
+    return False
+
+
+async def check_date_is_in_dates(callback: CallbackQuery, new_date: datetime, data: Dict[str, Any]) -> bool:
+    for value in data.values():
+        if isinstance(value, datetime) and value == new_date:
+            await callback.answer(
+                text=f'{str(Emoji.Warning)} Вы выбрали дату, которая уже включена в список выбранных дат. '
+                     f'Выберите другую дату!',
+                show_alert=True)
+            return True
+
+    return False
+
+
+async def check_some_dates_is_in_period(callback: CallbackQuery, new_date: datetime, required_period: str,
+                                        data: Dict[str, Any]) -> bool:
+    selected_dates_set = set()
+
+    for key, value in data.items():
+        if key.endswith('_period') and isinstance(value, list) and len(value) == 2:
+            selected_dates_set.add(value[0])
+            selected_dates_set.add(value[1])
+
+        elif isinstance(value, datetime):
+            selected_dates_set.add(value)
+
+    if selected_dates_set.intersection(set(create_date_range(data[required_period][0], new_date))):
+        await callback.answer(f'{str(Emoji.Warning)} Вы выбрали период, в котором уже находятся другие даты. '
+                              f'Выберите другой период или другие даты!',
+                              show_alert=True)
+        return True
+
+    else:
+        return False
 
 
 @filling_out_report_router.callback_query(F.data.split(':')[0] == 'day_period')
 @user_access
 async def select_days_period(callback: CallbackQuery, state: FSMContext):
-    year, month, day = map(int, callback.data.split(':')[1:])
-    work_dates_set = set(create_date_range(*get_current_work_period()))
+    new_date, work_dates_set = get_new_date_and_work_dates_set(callback.data)
 
     data = await state.get_data()
 
     period_count = sum(
-        1 for key, value in data.items() if key.endswith('_period') and type(value) is list and len(value) == 2) + 1
+        1 for key, value in data.items() if key.endswith('_period') and isinstance(value, list) and len(value) == 2) + 1
 
     if f'{period_count}_period' in data:
-        second_date = datetime(int(year), int(month), int(day))
+        if await check_date_is_before_work_dates(callback, new_date, work_dates_set):
+            return
 
-        if second_date in work_dates_set or second_date > max(work_dates_set):
-            data[f'{period_count}_period'].append(second_date)
+        elif (await check_date_is_in_period(callback, new_date, data) or
+              await check_date_is_in_dates(callback, new_date, data)):
+            return
 
-            re_select_inline_kb = generate_re_select_period_inline_kb()
-            await callback.message.edit_text(text=f'{str(Emoji.CheckMarkEmoji)} Выберите (при необходимости) '
-                                                  f'еще период/даты отсутствия, либо, если вы уже выбрали '
-                                                  f'нужный период нажмите "Продолжить:"',
-                                             reply_markup=re_select_inline_kb)
+        if await check_some_dates_is_in_period(callback, new_date, f'{period_count}_period', data):
+            await state.set_data({key: value for key, value in data.items() if key != f'{period_count}_period'})
 
-        else:
-            await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату до отчетного периода. Выберите дату, '
-                                       f'находящуюся в отчетном периоде ({str(Emoji.CheckMarkEmoji)}) или после него!',
-                                  show_alert=True)
+            await re_select_periods_or_dates_handler(callback, state)
+            return
+
+        data[f'{period_count}_period'].append(new_date)
+
+        await re_select_periods_or_dates_handler(callback, state)
 
     else:
-        first_date = datetime(int(year), int(month), int(day))
+        if await check_date_is_before_work_dates(callback, new_date, work_dates_set):
+            return
 
-        if first_date in work_dates_set or first_date > max(work_dates_set):
-            await state.update_data({f'{period_count}_period': [first_date]})
+        elif (await check_date_is_in_period(callback, new_date, data) or
+              await check_date_is_in_dates(callback, new_date, data)):
+            return
 
-        else:
-            await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату до отчетного периода. Выберите дату, '
-                                       f'находящуюся в отчетном периоде ({str(Emoji.CheckMarkEmoji)}) или после него!',
-                                  show_alert=True)
+        await state.update_data({f'{period_count}_period': [new_date]})
 
 
 @filling_out_report_router.callback_query(F.data.split(':')[0] == 'day_dates')
 @user_access
 async def select_days_dates(callback: CallbackQuery, state: FSMContext):
-    year, month, day = map(int, callback.data.split(':')[1:])
-    work_dates_set = set(create_date_range(*get_current_work_period()))
+    new_date, work_dates_set = get_new_date_and_work_dates_set(callback.data)
 
     data = await state.get_data()
 
     if 'start_day_dates' in data:
-        next_day = datetime(int(year), int(month), int(day))
+        if await check_date_is_before_work_dates(callback, new_date, work_dates_set):
+            return
 
-        if next_day in work_dates_set or next_day > max(work_dates_set):
-            await state.update_data({f'{day}.{month}.{year}': next_day})
+        elif (await check_date_is_in_period(callback, new_date, data) or
+              await check_date_is_in_dates(callback, new_date, data)):
+            return
 
-        else:
-            await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату до отчетного периода. Выберите дату, '
-                                       f'находящуюся в отчетном периоде ({str(Emoji.CheckMarkEmoji)}) или после него!',
-                                  show_alert=True)
+        await state.update_data({f'{new_date.day}.{new_date.month}.{new_date.year}': new_date})
 
     else:
-        start_date = datetime(int(year), int(month), int(day))
+        if await check_date_is_before_work_dates(callback, new_date, work_dates_set):
+            return
 
-        if start_date in work_dates_set or start_date > max(work_dates_set):
-            await state.update_data(start_day_dates=start_date)
+        elif (await check_date_is_in_period(callback, new_date, data) or
+              await check_date_is_in_dates(callback, new_date, data)):
+            return
 
-            calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
+        await state.update_data(start_day_dates=new_date)
+
+        calendar_markup = generate_calendar_inline_kb(new_date.year, new_date.month, is_period=False,
+                                                      first_date_or_period_selected=True)
+
+        try:
             await callback.message.edit_reply_markup(reply_markup=calendar_markup)
-
-        else:
-            await callback.answer(text=f'{str(Emoji.Warning)} Вы выбрали дату до отчетного периода. Выберите дату, '
-                                       f'находящуюся в отчетном периоде ({str(Emoji.CheckMarkEmoji)}) или после него!',
-                                  show_alert=True)
+        except:
+            pass
 
 
 @filling_out_report_router.callback_query(F.data.split(':')[0] == 'prev_month_period')
@@ -218,7 +321,8 @@ async def prev_month_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
 
     if 'start_day_dates' in data:
-        new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
+        new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False,
+                                                          first_date_or_period_selected=True)
 
     else:
         new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False)
@@ -257,7 +361,8 @@ async def next_month_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
 
     if 'start_day_dates' in data:
-        new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False, first_date_selected=True)
+        new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False,
+                                                          first_date_or_period_selected=True)
 
     else:
         new_calendar_markup = generate_calendar_inline_kb(year, month, is_period=False)
@@ -269,6 +374,9 @@ async def next_month_handler(callback: CallbackQuery, state: FSMContext):
 @user_access
 async def continue_filling_in_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+
+    if await check_fullness_of_period(callback, data):
+        return
 
     if 'choose_dates' in data:
         fill_manual_inline_kb = generate_fill_manual_inline_kb()
@@ -302,6 +410,11 @@ async def cancel_all_handler(callback: CallbackQuery, state: FSMContext):
 @filling_out_report_router.callback_query(F.data == 'skip_absence')
 @user_access
 async def skip_absence_handler(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    if await check_fullness_of_period(callback, data):
+        return
+
     cancel_inline_kb = generate_cancel_inline_kb()
     await callback.message.edit_text(text=f'{str(Emoji.Note)} Введите фактически выполненные '
                                           f'работы за отчетный период:',
@@ -331,7 +444,7 @@ async def partial_absence_handler(callback: CallbackQuery, state: FSMContext, em
                                   absence_reason_desc: str, start_date: datetime, end_date: datetime):
     start_period_text, end_period_text = format_period(start_date, end_date)
 
-    absence_reason_desc += f' c {start_period_text} по {end_period_text}'
+    absence_reason_desc += f' с {start_period_text} по {end_period_text}'
     await state.update_data(absence_periods=tuple((start_date, end_date)))
 
     await update_absence_reason_handler(callback, state, employee_id, absence_reason_desc, skip_absence=True)
@@ -341,59 +454,39 @@ async def update_absence_period_and_reason_handler(callback: CallbackQuery, stat
                                                    absence_reason_desc: str, min_end_date: datetime,
                                                    start_date: datetime, end_date: datetime,
                                                    skip_absence: bool = False):
-    response = await update_absence_period_or_dates_by_id(
-        employee_id, absence_period_or_dates={'periods': tuple((min_end_date + timedelta(days=1), end_date))})
+    absence_reason_full_desc = generate_absence_reason_full_desc(start_date, end_date, min_end_date,
+                                                                 absence_reason_desc)
 
-    if response.error:
-        await callback.answer(text=f'{str(Emoji.Error)} {response.message}', show_alert=True)
-        await main_menu_handler(callback.message, state)
-        return
-
-    else:
-        await callback.answer(text=f'{str(Emoji.Success)} {response.message}', show_alert=True)
-
-    if start_date.year == min_end_date.year:
-        start_period_text = format_date(start_date)
-
-    else:
-        start_period_text = format_date(start_date, is_same_year=False)
-
-    absence_reason_desc += f' с {start_period_text}'
-    end_period_text = format_date(min_end_date, is_same_year=False)
-    absence_reason_desc += f' по {end_period_text}'
-
-    await update_absence_reason_handler(callback, state, employee_id, absence_reason_desc, skip_absence)
+    await update_absence_reason_handler(callback, state, employee_id, absence_reason_full_desc, skip_absence)
 
 
 async def full_absence_handler(callback: CallbackQuery, state: FSMContext, employee_id: int,
                                absence_reason_desc: str, start_date: datetime, end_date: datetime,
                                work_date_range_set: Set[datetime]):
     min_end_date = max(work_date_range_set)
-
     await update_absence_period_and_reason_handler(callback, state, employee_id, absence_reason_desc,
-                                                   min_end_date, start_date, end_date, True)
+                                                   min_end_date, start_date, end_date)
 
 
 async def intersecting_absence_handler(callback: CallbackQuery, state: FSMContext, employee_id: int,
                                        absence_reason_desc: str, start_date: datetime, end_date: datetime,
                                        work_date_range_set: Set[datetime]):
     min_end_date = max(work_date_range_set)
-
-    await state.update_data(absence_periods=tuple((start_date, min_end_date)))
-
     await update_absence_period_and_reason_handler(callback, state, employee_id, absence_reason_desc, min_end_date,
-                                                   start_date, end_date)
+                                                   start_date, end_date, True)
 
 
-async def out_of_range_absence_handler(callback: CallbackQuery, state: FSMContext, start_date: datetime,
-                                       end_date: datetime):
-    await state.update_data(absence_period=(start_date, end_date))
-    await skip_absence_handler(callback, state)
+async def out_of_range_absence_handler(callback: CallbackQuery, state: FSMContext, employee_id: int,
+                                       absence_reason_desc: str, start_date: datetime,  end_date: datetime,
+                                       work_date_range_set: Set[datetime]):
+    min_end_date = max(work_date_range_set)
+    await update_absence_period_and_reason_handler(callback, state, employee_id, absence_reason_desc, min_end_date,
+                                                   start_date, end_date, True)
 
 
 async def update_manual_absence_reason_handler(message: Message, state: FSMContext, employee_id: int,
-                                               absence_reason_desc: str, skip_absence: bool = True):
-    response = await update_employee_absence_reason_by_id(employee_id, absence_reason_desc)
+                                               skip_absence: bool = True):
+    response = await update_employee_absence_reason_by_id(employee_id, message.text)
     if response.error:
         await message.answer(text=f'{str(Emoji.Error)} {response.message}')
         await main_menu_handler(message, state)
@@ -453,21 +546,24 @@ async def absence_reason_handler(callback: CallbackQuery, state: FSMContext):
                                            start_dates_period[0], end_dates_period[0], work_date_range_period_set)
 
     else:
-        await out_of_range_absence_handler(callback, state, start_dates_period[0], end_dates_period[0])
+        # TODO
+        await out_of_range_absence_handler(callback, state, data['employee_id'], absence_reason_desc,
+                                           start_dates_period[0], end_dates_period[0], work_date_range_period_set)
 
 
 async def choose_manual_dates_and_period_handler(message: Message, state: FSMContext, data: Dict[str, Any]):
-    selected_days, formatted_days, absence_dates = generate_dates_text_and_absence_dates(data)
-    await state.update_data(absence_dates=absence_dates)
+    selected_days, formatted_days, formatted_dates = generate_dates_text(data)
 
     start_dates, end_dates = get_dates_range(data)
-    await state.update_data(absence_periods=tuple(zip(start_dates, end_dates)))
-    selected_periods, formatted_periods = generate_period_text(start_dates, end_dates)
+    selected_periods, formatted_periods, formatted_dates_and_periods = (
+        generate_period_text(start_dates, end_dates, formatted_dates))
+
+    await state.update_data(formatted_dates_and_periods=formatted_dates_and_periods)
 
     cancel_inline_kb = generate_cancel_inline_kb()
 
     await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
-    await message.answer(
+    await message.edit_text(
         text=f'{str(Emoji.CalendarEmoji)} {str(Emoji.PeriodEmoji)} Вы выбрали следующие даты и период(ы):\n\n'
              f'{selected_days}\n{selected_periods}\n\nСкопируйте строчку ниже и введите причины отсутствия по отдельным '
              f'датам и периоду(ам) (запишите их вместо символов "()"):\n\n{formatted_days}, {formatted_periods}',
@@ -476,14 +572,13 @@ async def choose_manual_dates_and_period_handler(message: Message, state: FSMCon
 
 
 async def choose_manual_dates_handler(message: Message, state: FSMContext, data: Dict[str, Any]):
-    selected_days, formatted_days, absence_dates = generate_dates_text_and_absence_dates(data)
-
-    await state.update_data(absence_dates=absence_dates)
+    selected_days, formatted_days, formatted_dates = generate_dates_text(data)
+    await state.update_data(formatted_dates_and_periods=formatted_dates)
 
     cancel_inline_kb = generate_cancel_inline_kb()
 
     await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
-    await message.answer(
+    await message.edit_text(
         text=f'{str(Emoji.CalendarEmoji)} Вы выбрали следующие даты:\n\n'
              f'{selected_days}\nСкопируйте строчку ниже и введите причину отсутствия по отдельным датам '
              f'(запишите ее вместо символов "()"):\n\n'
@@ -494,13 +589,14 @@ async def choose_manual_dates_handler(message: Message, state: FSMContext, data:
 
 async def choose_manual_period_handler(message: Message, state: FSMContext, data: Dict[str, Any]):
     start_dates, end_dates = get_dates_range(data)
-    await state.update_data(absence_periods=tuple(zip(start_dates, end_dates)))
-    selected_periods, formatted_periods = generate_period_text(start_dates, end_dates)
+
+    selected_periods, formatted_periods, formatted_periods_and_dates = generate_period_text(start_dates, end_dates)
+    await state.update_data(formatted_dates_and_periods=formatted_periods_and_dates)
 
     cancel_inline_kb = generate_cancel_inline_kb()
 
     await state.set_state(FillingOutReportStates.enter_absence_reason_manual)
-    await message.answer(
+    await message.edit_text(
         text=f'{str(Emoji.PeriodEmoji)} Вы выбрали следующий период(ы):\n\n'
              f'{selected_periods}\n\nСкопируйте строчку ниже и введите причину(ы) отсутствия по выбранному периоду(ам) '
              f'(запишите ее(их) вместо символов "()"):\n\n'
@@ -523,22 +619,95 @@ async def absence_reason_manual_handler(message: Message, state: FSMContext):
         await choose_manual_period_handler(message, state, data)
 
 
+async def comparison_absence_dates_or_periods(message: Message, state: FSMContext, employee_id: int,
+                                              absence_dates_or_period_set: Set[datetime], work_range_set: Set[datetime],
+                                              data_to_save_dict: Dict[str, Any] | None = None):
+    if absence_dates_or_period_set == work_range_set:
+        await update_manual_absence_reason_handler(message, state, employee_id)
+
+    elif absence_dates_or_period_set.issubset(work_range_set):
+        await update_manual_absence_reason_handler(message, state, employee_id, skip_absence=False)
+
+    elif work_range_set.issubset(absence_dates_or_period_set):
+        await update_manual_absence_reason_handler(message, state, employee_id)
+
+    elif absence_dates_or_period_set.intersection(work_range_set):
+        await update_manual_absence_reason_handler(message, state, employee_id, skip_absence=False)
+
+    else:
+        await update_manual_absence_reason_handler(message, state, employee_id, skip_absence=False)
+
+
 async def enter_absence_reason_manual_dates_and_period_handler(message: Message, state: FSMContext,
                                                                data: Dict[str, Any]):
-    print(data['absence_dates'], data['absence_periods'])
+    employee_id = data['employee_id']
+    absence_dates_and_periods_set = set(data['absence_dates'])
+    work_range_set = set(create_date_range(*get_current_work_period()))
+    data_to_save_dates = [date for date in absence_dates_and_periods_set if date > max(work_range_set)]
+
+    data_to_save_dict = {}
+
+    if data_to_save_dates:
+        data_to_save_dict['absence_dates'] = data_to_save_dates
+
+    data_to_save_periods = []
+
+    for absence_period in data['absence_periods']:
+        if absence_period[0] > max(work_range_set):
+            data_to_save_periods.append(absence_period)
+        elif absence_period[1] > max(work_range_set):
+            data_to_save_periods.append((max(work_range_set), absence_period[1]))
+
+        absence_date_range = create_date_range(*absence_period)
+        for date in absence_date_range:
+            absence_dates_and_periods_set.add(date)
+
+    if data_to_save_periods:
+        data_to_save_dict['absence_periods'] = data_to_save_periods
+
+    if data_to_save_dict:
+        await comparison_absence_dates_or_periods(message, state, employee_id, absence_dates_and_periods_set,
+                                                  work_range_set, data_to_save_dict)
+
+    else:
+        await comparison_absence_dates_or_periods(message, state, employee_id, absence_dates_and_periods_set,
+                                                  work_range_set)
 
 
 async def enter_absence_reason_manual_dates_handler(message: Message, state: FSMContext, data: Dict[str, Any]):
+    employee_id = data['employee_id']
     absence_dates_set = set(data['absence_dates'])
-    work_dates_set = set(create_date_range(*get_current_work_period()))
+    work_range_set = set(create_date_range(*get_current_work_period()))
 
-    
+    data_to_save = [date for date in absence_dates_set if date > max(work_range_set)]
 
+    data_to_save_dict = {'dates': data_to_save} if data_to_save else None
+
+    await comparison_absence_dates_or_periods(message, state, employee_id, absence_dates_set, work_range_set,
+                                              data_to_save_dict)
 
 
 async def enter_absence_reason_manual_periods_handler(message: Message, state: FSMContext, data: Dict[str, Any]):
-    print(data['absence_periods'])
-    start_dates_period, end_dates_period = get_dates_range(data)
+    employee_id = data['employee_id']
+
+    absence_periods_set = set()
+    work_range_set = set(create_date_range(*get_current_work_period()))
+    data_to_save = []
+
+    for absence_period in data['absence_periods']:
+        if absence_period[0] > max(work_range_set):
+            data_to_save.append(absence_period)
+        elif absence_period[1] > max(work_range_set):
+            data_to_save.append((max(work_range_set), absence_period[1]))
+
+        absence_date_range = create_date_range(*absence_period)
+        for date in absence_date_range:
+            absence_periods_set.add(date)
+
+    data_to_save_dict = {'periods': data_to_save} if data_to_save else None
+
+    await comparison_absence_dates_or_periods(message, state, employee_id, absence_periods_set, work_range_set,
+                                              data_to_save_dict)
 
 
 @filling_out_report_router.message(FillingOutReportStates.enter_absence_reason_manual)
@@ -554,82 +723,7 @@ async def enter_absence_reason_manual_handler(message: Message, state: FSMContex
         await main_menu_handler(message, state)
         return
 
-    if 'absence_dates' in data and 'absence_periods' in data:
-        await enter_absence_reason_manual_dates_and_period_handler(message, state, data)
-
-    elif 'absence_dates' in data:
-        await enter_absence_reason_manual_dates_handler(message, state, data)
-
-    elif 'absence_periods' in data:
-        await enter_absence_reason_manual_periods_handler(message, state, data)
-
-
-    date_range_period_set, work_date_range_period_set = get_date_sets(start_dates_period[0], end_dates_period[0])
-
-    selected_set, work_date_range_period_set = get_absence_date_sets(data)
-
-    if selected_set == work_date_range_period_set:
-        await update_manual_absence_reason_handler(message, state, data['employee_id'], message.text)
-
-    if max(selected_set) > max(work_date_range_period_set):
-        if 'absence_period' in data:
-            pass
-        elif 'absence_dates' in data:
-            pass
-        await update_manual_absence_reason_handler(message, state, data['employee_id'], message.text,
-                                                   skip_absence=False)
-
-    elif 'employee_id' in data:
-        if 'absence_dates' in data:
-            selected_dates_set = set(data['selected_dates'])
-            work_date_range_period_set = set(create_date_range(
-                *get_current_work_period()))
-
-            if selected_dates_set == work_date_range_period_set:
-                pass
-
-            elif selected_dates_set.issubset(work_date_range_period_set):
-                pass
-
-            elif work_date_range_period_set.issubset(selected_dates_set):
-                pass
-
-            elif work_date_range_period_set.intersection(selected_dates_set):
-                pass
-
-            else:
-                pass
-
-        elif 'absence_period' in data:
-            absence_period_set = set(create_date_range(data['absence_period'][0],
-                                                       data['absence_period'][1]))
-            work_date_range_period_set = set(create_date_range(
-                *get_current_work_period()))
-
-            if absence_period_set == work_date_range_period_set:
-                pass
-
-            elif absence_period_set.issubset(work_date_range_period_set):
-                pass
-
-            elif work_date_range_period_set.issubset(absence_period_set):
-                pass
-
-            elif work_date_range_period_set.intersection(absence_period_set):
-                pass
-
-            else:
-                pass
-
-        response = await update_employee_absence_reason_by_id(data['employee_id'],
-                                                              message.text)
-        if response.error:
-            await message.answer(text=f'{str(Emoji.Error)} {response.message}')
-            await main_menu_handler(message, state)
-
-        else:
-            await message.answer(text=f'{str(Emoji.Success)} {response.message}')
-            await main_menu_handler(message, state)
+    parse_absence_dates_and_periods(message.text, data['formatted_dates_and_periods'])
 
 
 @filling_out_report_router.message(FillingOutReportStates.enter_actual_performance)

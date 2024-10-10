@@ -69,7 +69,7 @@ class BrosokReporter:
         return self.bytes_output.getvalue()
 
     def __get_status(self, absence_reason_desc: str):
-        if absence_reason_desc in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
+        if absence_reason_desc.split('|')[0] in [absence_reason.desc for absence_reason in list(AbsenceReasons)]:
 
             start_week, end_week = get_current_work_period()
 
@@ -83,7 +83,7 @@ class BrosokReporter:
                       f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
 
         else:
-            status = absence_reason_desc
+            status = absence_reason_desc.split('|')[0]
 
         return status
 

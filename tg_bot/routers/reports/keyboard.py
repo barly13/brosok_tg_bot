@@ -67,7 +67,8 @@ def generate_re_select_period_inline_kb():
     return re_select_period_kb.as_markup()
 
 
-def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True, first_date_selected: bool = False):
+def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True,
+                                first_date_or_period_selected: bool = False):
     months_dict = {1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
                    9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'}
 
@@ -134,13 +135,20 @@ def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True, f
             InlineKeyboardButton(text='>>', callback_data=f'next_month_dates:{year}:{month}')
         )
 
-    if not is_period and first_date_selected:
-        calendar_keyboard_builder.row(InlineKeyboardButton(text=f'{str(Emoji.DownArrowEmoji)} Продолжить',
-                                                           callback_data='continue_filling_in'))
+    if first_date_or_period_selected:
+        calendar_keyboard_builder.row(
+            InlineKeyboardButton(text=f'{str(Emoji.DownArrowEmoji)} Продолжить',
+                                 callback_data='continue_filling_in'),
+            InlineKeyboardButton(text=f'{Emoji.MoreEmoji} Заполнить еще...', callback_data='fill_more')
+        )
+
+    else:
+        calendar_keyboard_builder.row(
+            InlineKeyboardButton(text=f'{str(Emoji.RightArrowEmoji)} Пропустить', callback_data=f'skip_absence')
+        )
 
     calendar_keyboard_builder.row(
-        InlineKeyboardButton(text=f'{str(Emoji.Error)} Отмена', callback_data=f'cancel_all'),
-        InlineKeyboardButton(text=f'{str(Emoji.RightArrowEmoji)} Пропустить', callback_data=f'skip_absence')
+        InlineKeyboardButton(text=f'{str(Emoji.Error)} Отмена', callback_data=f'cancel_all')
     )
 
     return calendar_keyboard_builder.as_markup()
@@ -206,4 +214,3 @@ def generate_cancel_inline_kb():
     cancel_inline_kb.button(text=f'{str(Emoji.Error)} Отмена', callback_data='cancel_all')
 
     return cancel_inline_kb.as_markup()
-

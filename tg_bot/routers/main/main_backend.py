@@ -37,6 +37,9 @@ async def send_reminder_ro_all_employees():
     for employee_id, employee_tg_id in USERS_DICT_IDS.items():
         try:
             response = await get_employee_by_id(employee_id)
+            if (response.value.absence_reason.split('|')[0] in
+                    [absence_reason.desc for absence_reason in list(AbsenceReasons)]):
+                pass
             await BOT.send_message(
                 chat_id=employee_tg_id,
                 text=f'{str(Emoji.FourAndHalfPM)} Уведомление: {response.value.full_name}, '
@@ -50,7 +53,7 @@ async def send_reminder_ro_all_employees():
 async def check_if_data_filled(employee_id: int):
     response = await get_employee_by_id(employee_id)
     if (ReportData.is_report_data_has_not_employee(employee_id)
-            and response.value.absence_reason == AbsenceReasons.NoReason.num):
+            and response.value.absence_reason.split('|')[0] == AbsenceReasons.NoReason.desc):
         return False
 
     return True
