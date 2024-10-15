@@ -53,6 +53,25 @@ def generate_period_or_dates_inline_kb():
     return period_or_dates_kb.as_markup()
 
 
+def generate_earlier_filled_absence_reason_inline_kb():
+    earlier_filled_absence_reason_kb = InlineKeyboardBuilder()
+
+    earlier_filled_absence_reason_kb.row(InlineKeyboardButton(text=f'{str(Emoji.EditText)} Заполнить другую информацию',
+                                                              callback_data='earlier_filled:another'))
+
+    earlier_filled_absence_reason_kb.row(InlineKeyboardButton(text=f'{str(Emoji.Note)} Дополнить текущую информацию',
+                                                              callback_data='earlier_filled:more'))
+
+    earlier_filled_absence_reason_kb.row(InlineKeyboardButton(text=f'{str(Emoji.RightArrowEmoji)} Оставить '
+                                                                   f'текущую информацию по отсутствию',
+                                                              callback_data='skip_absence'))
+
+    earlier_filled_absence_reason_kb.row(InlineKeyboardButton(text=f'{str(Emoji.Error)} Отмена',
+                                                              callback_data='cancel_all'))
+
+    return earlier_filled_absence_reason_kb.as_markup()
+
+
 def generate_re_select_period_inline_kb():
     re_select_period_kb = InlineKeyboardBuilder()
 
