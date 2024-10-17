@@ -4,7 +4,6 @@ from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.models.Employee import Employee
-from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from datetime import datetime, timedelta
 
 from tg_bot.routers.reports.backend.filling_out_report_backend import get_current_work_period
@@ -19,16 +18,6 @@ def generate_inline_kb_for_employees_list(employees: typing.List[Employee]):
 
     employees_list_kb.adjust(1)
     return employees_list_kb.as_markup()
-
-
-def generate_inline_kb_for_absence_reasons():
-    absence_reasons_kb = InlineKeyboardBuilder()
-
-    for absence_reason in AbsenceReasons:
-        absence_reasons_kb.button(text=f'{absence_reason.desc}', callback_data=f'absence_reason__{absence_reason.num}')
-
-    absence_reasons_kb.adjust(1)
-    return absence_reasons_kb.as_markup()
 
 
 def bold_numbers(number):
@@ -105,7 +94,7 @@ def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True,
     calendar_keyboard_builder.row(*[InlineKeyboardButton(text=week_day, callback_data='ignore')
                                     for week_day in days_of_week])
 
-    first_date = datetime(year, month, 1)
+    first_date = datetime(year, month, 1).date()
     first_day = first_date.weekday()
     start_empty_buttons = [InlineKeyboardButton(text=' ', callback_data='ignore') for _ in range(first_day)]
 
@@ -115,7 +104,7 @@ def generate_calendar_inline_kb(year: int, month: int, is_period: bool = True,
 
     calendar_days = []
     for day in range(1, days_in_month + 1):
-        current_date = datetime(year, month, day)
+        current_date = datetime(year, month, day).date()
 
         if start_date <= current_date <= end_date:
             if is_period:

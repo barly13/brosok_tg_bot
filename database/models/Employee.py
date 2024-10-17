@@ -1,6 +1,5 @@
 from sqlalchemy import Column, String, Float, JSON, update
 from typing import List
-from datetime import datetime
 
 from tg_bot.routers.reports.backend.absence_reasons_enum import AbsenceReasons
 from .BaseModel import BaseModel

@@ -1,8 +1,6 @@
 import os
 import xlwt
 from io import BytesIO
-from datetime import datetime, timedelta
-import locale
 
 from database.models.Employee import Employee
 from database.models.ReportData import ReportData
@@ -79,7 +77,7 @@ class BrosokReporter:
             start_month_ru = self.months_translate[start_month_en]
             end_month_ru = self.months_translate[end_month_en]
 
-            status = (f'{absence_reason_desc} с "{start_week.strftime("%d")}" {start_month_ru} '
+            status = (f'{absence_reason_desc.split('|')[0]} с "{start_week.strftime("%d")}" {start_month_ru} '
                       f'по "{end_week.strftime("%d")}" {end_month_ru} {end_week.strftime("%Y")} г.')
 
         else:
